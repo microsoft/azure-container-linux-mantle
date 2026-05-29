@@ -56,7 +56,6 @@ func (t *TestCluster) Run(name string, f func(c TestCluster)) bool {
 		f(TestCluster{H: h, Cluster: t.Cluster})
 	})
 	return !t.hasFailure
-
 }
 
 // RunNative runs a registered NativeFunc on a remote machine

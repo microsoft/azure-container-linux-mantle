@@ -66,7 +66,7 @@ func (qc *Cluster) NewMachineWithOptions(userdata *conf.UserData, options platfo
 	netif := qc.flight.Dnsmasq.GetInterface("br0")
 	ip := strings.Split(netif.DHCPv4[0].String(), "/")[0]
 
-	conf, err := qc.RenderUserData(userdata, map[string]string{
+	userConf, err := qc.RenderUserData(userdata, map[string]string{
 		"$public_ipv4":  "${COREOS_CUSTOM_PUBLIC_IPV4}",
 		"$private_ipv4": "${COREOS_CUSTOM_PRIVATE_IPV4}",
 	})
@@ -76,7 +76,7 @@ func (qc *Cluster) NewMachineWithOptions(userdata *conf.UserData, options platfo
 	}
 	qc.mu.Unlock()
 
-	conf.AddSystemdUnit("coreos-metadata.service", `[Unit]
+	userConf.AddSystemdUnit("coreos-metadata.service", `[Unit]
 Description=QEMU metadata agent
 After=nss-lookup.target
 After=network-online.target
@@ -90,16 +90,54 @@ ExecStart=/usr/bin/bash -c 'echo "COREOS_CUSTOM_PRIVATE_IPV4=`+ip+`\nCOREOS_CUST
 ExecStartPost=/usr/bin/ln -fs /run/metadata/flatcar /run/metadata/coreos
 `, false)
 
+	// arm64-usr hacky way:
+	// Kola tests on qemu for arm64-usr uses full system emulation which is very slow.
+	// Lot of tests fail with device timeout errors. One way to mitigate this is to lower
+	// the no of udev-workers used by systemd-udevd service to reduce resource contention
+	// when no of parallel qemu vms started is high.
+	// Since not all tests use ignition but also use cloud-config, we add this drop-in for all qemu tests.
+	// what this means is we add a default ignition config as well for tests which dont need them.
+	// not sure how to inject a global drop-in for all tests without injecting ignition for non-ignition tests.
+	var armUserConf *conf.Conf
+	if qc.flight.opts.Board == "arm64-usr" {
+		armUserData := conf.Ignition(`{"ignition": {"version": "3.0.0"}}`)
+		armUserConf, err = armUserData.Render("")
+		if err != nil {
+			return nil, err
+		}
+
+		if userConf.IsIgnition() {
+			userConf.AddFile("/etc/udev/udev.conf", "root", `# This file is specific for arm64-usr qemu tests
+# Reduce the number of udev workers to mitigate resource contention on slow qemu emulation
+children_max=4
+`, 0644)
+		} else {
+			// For cloud-config based tests, create a new ignition config file
+			armUserConf.AddFile("/etc/udev/udev.conf", "root", `# This file is specific for arm64-usr qemu tests
+# Reduce the number of udev workers to mitigate resource contention on slow qemu emulation
+children_max=4
+`, 0644)
+		}
+	}
+
 	// confPath is relative to the machine folder
 	var confPath string
-	if conf.IsIgnition() {
+	if userConf.IsIgnition() {
 		confPath = "ignition.json"
-		if err := conf.WriteFile(filepath.Join(dir, confPath)); err != nil {
+		if err := userConf.WriteFile(filepath.Join(dir, confPath)); err != nil {
 			return nil, err
 		}
 	} else {
-		confPath, err = local.MakeConfigDrive(conf, dir)
+		confPath, err = local.MakeConfigDrive(userConf, dir)
 		if err != nil {
+			return nil, err
+		}
+	}
+
+	var armConfPath string
+	if qc.flight.opts.Board == "arm64-usr" && armUserConf.String() != "" {
+		armConfPath = "arm-ignition.json"
+		if err := armUserConf.WriteFile(filepath.Join(dir, armConfPath)); err != nil {
 			return nil, err
 		}
 	}
@@ -151,7 +189,7 @@ ExecStartPost=/usr/bin/ln -fs /run/metadata/flatcar /run/metadata/coreos
 		}()
 	}
 
-	qmCmd, extraFiles, err := platform.CreateQEMUCommand(qc.flight.opts.Board, qm.id, firmware, ovmfVars, qm.consolePath, confPath, qc.flight.diskImagePath, qc.flight.opts.EnableSecureboot, conf.IsIgnition(), options)
+	qmCmd, extraFiles, err := platform.CreateQEMUCommand(qc.flight.opts.Board, qm.id, firmware, ovmfVars, qm.consolePath, confPath, qc.flight.diskImagePath, armConfPath, qc.flight.opts.EnableSecureboot, userConf.IsIgnition(), options)
 	if err != nil {
 		return nil, err
 	}

@@ -300,21 +300,33 @@ func (a *API) GC(gracePeriod time.Duration) error {
 		return fmt.Errorf("listing resource groups: %v", err)
 	}
 
+	var gcErrors []string
 	for _, l := range listGroups {
 		if strings.HasPrefix(*l.Name, a.ResourceGroupBasename()) {
+			if l.Tags == nil || l.Tags["createdAt"] == nil {
+				plog.Errorf("Resource group %s has no createdAt tag — cannot determine age, skipping", *l.Name)
+				gcErrors = append(gcErrors, fmt.Sprintf("%s: missing createdAt tag", *l.Name))
+				continue
+			}
 			createdAt := *l.Tags["createdAt"]
 			timeCreated, err := time.Parse(time.RFC3339, createdAt)
 			if err != nil {
-				return fmt.Errorf("error parsing time: %v", err)
+				plog.Errorf("Resource group %s has unparseable createdAt %q: %v, skipping", *l.Name, createdAt, err)
+				gcErrors = append(gcErrors, fmt.Sprintf("%s: bad createdAt %q: %v", *l.Name, createdAt, err))
+				continue
 			}
 			if !timeCreated.After(durationAgo) {
 				if err = a.TerminateResourceGroup(*l.Name); err != nil {
-					return err
+					plog.Errorf("Failed to terminate resource group %s: %v, continuing", *l.Name, err)
+					gcErrors = append(gcErrors, fmt.Sprintf("%s: terminate failed: %v", *l.Name, err))
 				}
 			}
 		}
 	}
 
+	if len(gcErrors) > 0 {
+		return fmt.Errorf("GC completed with %d errors: %s", len(gcErrors), strings.Join(gcErrors, "; "))
+	}
 	return nil
 }
 

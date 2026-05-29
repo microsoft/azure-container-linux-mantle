@@ -42,7 +42,7 @@ var (
 	defaultTargetBoard          = sdk.DefaultBoard()
 	kolaArchitectures           = []string{"amd64"}
 	kolaPlatforms               = []string{"akamai", "aws", "azure", "brightbox", "do", "esx", "external", "gce", "hetzner", "openstack", "qemu", "qemu-unpriv", "scaleway", "stackit"}
-	kolaDistros                 = []string{"cl", "fcos", "rhcos"}
+	kolaDistros                 = []string{"acl", "cl", "fcos", "rhcos"}
 	kolaChannels                = []string{"alpha", "beta", "stable", "edge", "lts"}
 	kolaOfferings               = []string{"basic", "pro"}
 	kolaDefaultImages           = map[string]string{
@@ -50,6 +50,7 @@ var (
 		"arm64-usr": sdk.BuildRoot() + "/images/arm64-usr/latest/flatcar_production_image.bin",
 	}
 	kolaIgnitionVersionDefaults = map[string]string{
+		"acl":   "v2",
 		"cl":    "v2",
 		"fcos":  "v3",
 		"rhcos": "v3",
@@ -93,6 +94,7 @@ func init() {
 	bv(&kola.Options.EnableSecureboot, "enable-secureboot", false, "Instantiate a Secureboot Machine")
 	iv(&kola.Options.SSHRetries, "ssh-retries", kolaSSHRetries, "Number of retries with the SSH timeout when starting the machine")
 	dv(&kola.Options.SSHTimeout, "ssh-timeout", kolaSSHTimeout, "A timeout for a single try of establishing an SSH connection when starting the machine")
+	sv(&kola.Options.TrustedSourceCIDR, "trusted-source-cidr", "10.0.0.0/8", "Source CIDR that ACL kola tests whitelist in iptables on cluster nodes to allow inter-node traffic. Defaults to 10.0.0.0/8 to cover any RFC1918 10/8 subnet (kola-managed VNets and BYO-VNets such as 10.100.0.0/16)")
 
 	// rhcos-specific options
 	sv(&kola.Options.OSContainer, "oscontainer", "", "oscontainer image pullspec for pivot (RHCOS only)")
@@ -127,6 +129,7 @@ func init() {
 	sv(&kola.AzureOptions.DiskController, "azure-disk-controller", "default", "Use a specific disk-controller for storage (default \"default\", also \"nvme\" and \"scsi\")")
 	sv(&kola.AzureOptions.ResourceGroup, "azure-resource-group", "", "Deploy resources in an existing resource group")
 	sv(&kola.AzureOptions.ResourceGroupBasename, "azure-resource-group-basename", "kola-cluster", "Prefix used for creating new resource groups")
+	root.PersistentFlags().StringArray("azure-resource-group-tag", nil, "Extra tags for created resource groups (key=value, repeatable)")
 	sv(&kola.AzureOptions.AvailabilitySet, "azure-availability-set", "", "Deploy instances with an existing availibity set")
 	sv(&kola.AzureOptions.KolaVnet, "azure-kola-vnet", "", "Pass the vnet/subnet that kola is being ran from to restrict network access to created storage accounts")
 	sv(&kola.AzureOptions.VMIdentity, "azure-vm-identity", "", "Assign a managed identity to the VM by name (will be looked up for its ID)")
@@ -294,6 +297,18 @@ func syncOptions() error {
 	if kola.QEMUOptions.EnableSecureboot && kola.QEMUOptions.OVMFVars == "" {
 		return fmt.Errorf("secureboot requires OVMF vars file")
 	}
+	rgTags, _ := root.PersistentFlags().GetStringArray("azure-resource-group-tag")
+	if len(rgTags) > 0 {
+		kola.AzureOptions.ResourceGroupTags = make(map[string]string, len(rgTags))
+		for _, tag := range rgTags {
+			parts := strings.SplitN(tag, "=", 2)
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid resource group tag %q, expected key=value", tag)
+			}
+			kola.AzureOptions.ResourceGroupTags[parts[0]] = parts[1]
+		}
+	}
+
 	units, _ := root.PersistentFlags().GetStringSlice("debug-systemd-units")
 	for _, unit := range units {
 		kola.Options.SystemdDropins = append(kola.Options.SystemdDropins, platform.SystemdDropin{

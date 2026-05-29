@@ -97,10 +97,10 @@ func init() {
 	register.Register(&register.Test{
 		Run:     localGadgetTest,
 		Name:    `bpf.local-gadget`,
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 		// required while SELinux policy is not correcly updated to support
 		// `bpf` and `perfmon` permission.
-		Flags: []register.Flag{register.NoEnableSelinux},
+		Flags: []register.Flag{register.NoEnableSelinux, register.NeedsDocker},
 		// current LTS has DOCKER_API_VERSION=1.40 which is too old for local-gadget docker client.
 		// "client version 1.41 is too new. Maximum supported API version is 1.40"
 		MinVersion: semver.Version{Major: 3033},

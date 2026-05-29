@@ -29,7 +29,7 @@ func init() {
 		ExcludePlatforms: []string{"qemu"}, // redundant on qemu
 		Flags:            []register.Flag{register.NoSSHKeyInMetadata},
 		UserData:         conf.Ignition(`{"ignitionVersion": 1}`),
-		Distros:          []string{"cl"},
+		Distros:          []string{"acl", "cl"},
 		// Does not really need to run in addition to coreos.ignition.ssh.key, so at least limit it to one cloud (here "do")
 		Platforms: []string{"do"},
 	})
@@ -41,6 +41,6 @@ func init() {
 		Flags:            []register.Flag{register.NoSSHKeyInMetadata},
 		UserData:         conf.Ignition(`{"ignition":{"version":"2.0.0"}}`),
 		UserDataV3:       conf.Ignition(`{"ignition":{"version":"3.0.0"}}`),
-		Distros:          []string{"cl", "fcos", "rhcos"},
+		Distros:          []string{"acl", "cl", "fcos", "rhcos"},
 	})
 }

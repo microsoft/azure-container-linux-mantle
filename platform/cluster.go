@@ -137,7 +137,7 @@ func (bc *BaseCluster) Keys() ([]*agent.Key, error) {
 }
 
 func (bc *BaseCluster) RenderUserData(userdata *conf.UserData, ignitionVars map[string]string) (*conf.Conf, error) {
-	if userdata == nil {
+	if userdata == nil || userdata.IsEmpty() {
 		switch bc.IgnitionVersion() {
 		case "v2":
 			userdata = conf.Ignition(`{"ignition": {"version": "2.0.0"}}`)
@@ -171,11 +171,85 @@ func (bc *BaseCluster) RenderUserData(userdata *conf.UserData, ignitionVars map[
 		return nil, err
 	}
 
-	// By default, the user is added to the sudo group (for initial operations like enabling SELinux).
+	// Validate username to prevent injection into systemd unit contents.
+	// The username is interpolated into single-quoted sh -c commands in generated
+	// systemd units, so restrict to POSIX-portable characters only.
+	for _, ch := range u {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-') {
+			return nil, fmt.Errorf("invalid username %q: must contain only [a-zA-Z0-9_-]", u)
+		}
+	}
+
+	// By default, the user is added to a sudo-capable group (for initial operations like enabling SELinux).
 	if u != "core" {
 		if err := conf.AddUserToGroups(u, []string{"sudo"}); err != nil {
 			return nil, fmt.Errorf("adding user to group: %w", err)
 		}
+	}
+
+	// ACL Phase 2: core is fully inert (/sbin/nologin, no wheel/docker/sudoers).
+	// Without this block, all tests that SSH as core fail with
+	// "no /etc/os-release" (really /sbin/nologin rejecting the session).
+	// Fixes: cl.ignition.*, bpf.local-gadget, acl.flannel.*, cl.cloudinit.script, etc.
+	//
+	// Mechanisms by config type:
+	//   1. AddSystemdUnit  — ignition (v2/v3): oneshot writes sudoers + usermod.
+	//   2. AddFile          — script/multipart-mime: sudoers drop-in
+	//      (silently dropped on ign-v2, but (1) covers that).
+	//   3. AppendScriptCommands — script only: inline usermod before sshd.
+	//      Fixes cl.cloudinit.script.
+	//
+	// cloud-config and multipart-mime have no mechanism to run usermod before
+	// sshd, so cl.cloudinit.basic and cl.cloudinit.multipart-mime are excluded
+	// from ACL in their test registrations (cloudinit.go).
+	if bc.Distribution() == "acl" && u == "core" {
+		// (1) Systemd unit for ignition configs:
+		conf.AddSystemdUnit("kola-core-setup.service", `[Unit]
+Description=Create core user for kola tests
+After=systemd-sysusers.service systemd-sysext.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'id core &>/dev/null || useradd -m -s /bin/bash -G wheel core'
+ExecStart=/bin/sh -c 'id core &>/dev/null && usermod -s /bin/bash -a -G wheel core'
+ExecStart=-/usr/sbin/usermod -a -G docker core
+ExecStart=/bin/sh -c 'printf "core ALL=(ALL) NOPASSWD: ALL\n" > /etc/sudoers.d/kola-core-nopasswd && chmod 0440 /etc/sudoers.d/kola-core-nopasswd'
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target`, true)
+
+		// (2) Sudoers file for script/multipart-mime (silently dropped on ign-v2):
+		conf.AddFile("/etc/sudoers.d/kola-core-nopasswd", "root",
+			"core ALL=(ALL) NOPASSWD: ALL\n", 0440)
+
+		// (3) Inline commands for script configs (no-op on other types):
+		conf.AppendScriptCommands("\n# Create core user for kola tests\n" +
+			"id core &>/dev/null || useradd -m -s /bin/bash -G wheel core\n" +
+			"id core &>/dev/null && usermod -s /bin/bash -a -G wheel core\n" +
+			"usermod -a -G docker core 2>/dev/null || true\n")
+	}
+
+	// On ACL the docker group comes from the docker sysext (loaded after
+	// systemd-sysusers), so no user can be added to it at build time.
+	// Add the kola user to the docker group at boot. The "-" prefix on
+	// ExecStart tolerates failure when docker sysext isn't loaded (group
+	// doesn't exist). Some tests (e.g. sysext.custom-docker.sysext) build
+	// their own docker sysext at runtime without setting IncludeDocker.
+	// For core, kola-core-setup.service above already handles docker group.
+	if bc.Distribution() == "acl" && u != "core" {
+		conf.AddSystemdUnit("kola-docker-group.service", fmt.Sprintf(`[Unit]
+Description=Add %s to docker group for kola tests
+Before=docker.service containerd.service
+After=systemd-sysusers.service systemd-sysext.service
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/sbin/usermod -a -G docker %s
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target`, u, u), true)
 	}
 
 	for _, dropin := range bc.bf.baseopts.SystemdDropins {
@@ -225,6 +299,28 @@ ExecStart=/usr/bin/touch /run/pivot/reboot-needed
 WantedBy=multi-user.target
 `, true)
 		conf.AddFile("/etc/pivot/image-pullspec", "root", bc.bf.baseopts.OSContainer, 0644)
+	}
+
+	if bc.Distribution() == "acl" && bc.rconf.IncludeDocker {
+		conf.AddSystemdUnit("sysext-docker-link.service", `[Unit]
+Description=Create symlink for docker sysext
+DefaultDependencies=no
+Before=systemd-sysext.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/bin/ln -sf /oem/sysext/docker.raw /etc/extensions/docker.raw
+
+[Install]
+WantedBy=sysinit.target
+`, true)
+		conf.AddSystemdUnitDropin("systemd-sysext.service", "10-wait-for-docker-link.conf",
+			`[Unit]
+Wants=sysext-docker-link.service
+After=sysext-docker-link.service
+`)
 	}
 
 	if conf.IsIgnition() {

@@ -85,7 +85,7 @@ func init() {
 		Run:              setHostname,
 		ClusterSize:      1,
 		UserData:         configV1,
-		Distros:          []string{"cl"},
+		Distros:          []string{"acl", "cl"},
 		ExcludePlatforms: []string{"azure"},
 		// It's enough if coreos.ignition.sethostname runs on all clouds
 		Platforms: []string{"qemu", "qemu-unpriv"},
@@ -96,7 +96,7 @@ func init() {
 		ClusterSize:      1,
 		UserData:         configV2,
 		UserDataV3:       configV3,
-		Distros:          []string{"cl", "fcos", "rhcos"},
+		Distros:          []string{"acl", "cl", "fcos", "rhcos"},
 		ExcludePlatforms: []string{"azure"},
 		// Should run on all clouds to test for conflicts with DHCP hostnames, afterburn or other mechanisms
 	})

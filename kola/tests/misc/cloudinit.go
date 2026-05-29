@@ -155,7 +155,7 @@ hostname: "core1"
 write_files:
   - path: "/foo"
     content: bar`),
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 		// Hetzner: we need to implement coreos-cloudinit support for Hetzner.
 		// Akamai: we need to implement coreos-cloudinit support for Akamai.
 		ExcludePlatforms: []string{"qemu-unpriv", "hetzner", "akamai"},
@@ -167,6 +167,8 @@ write_files:
 		Name:        "cl.cloudinit.script",
 		UserData: conf.Script(`#!/bin/bash
 echo bar > /foo
+# Create core user if it doesn't exist (ACL Phase 2 makes it inert)
+id core &>/dev/null || useradd -m -s /bin/bash core
 mkdir -p ~core/.ssh
 cat <<EOF >> ~core/.ssh/authorized_keys
 @SSH_KEYS@
@@ -174,7 +176,7 @@ EOF
 chown -R core.core ~core/.ssh
 chmod 700 ~core/.ssh
 chmod 600 ~core/.ssh/authorized_keys`),
-		Distros:          []string{"cl"},
+		Distros:          []string{"acl", "cl"},
 		ExcludePlatforms: []string{"qemu-unpriv"},
 		// When cl.cloudinit.basic passed we don't need to run this on all clouds
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
@@ -184,7 +186,7 @@ chmod 600 ~core/.ssh/authorized_keys`),
 		ClusterSize: 1,
 		Name:        "cl.cloudinit.multipart-mime",
 		UserData:    conf.MultipartMimeConfig(multipartMimeUserdata),
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
 		MinVersion:  semver.Version{Major: 3620},
 	})
@@ -226,7 +228,9 @@ func CloudInitMultipartMime(c cluster.TestCluster) {
 	}
 
 	// we can ignore the output. If the command fails, MustSSH will fail the test.
-	c.MustSSH(m, fmt.Sprintf("grep %s ~core/.ssh/authorized_keys", expectKey))
+	// The bare ssh_authorized_keys directive in cloud-config is always written
+	// to core's authorized_keys by coreos-cloudinit — that's the default behavior.
+	c.MustSSH(m, fmt.Sprintf("sudo grep %s ~core/.ssh/authorized_keys", expectKey))
 
 	out = c.MustSSH(m, "ls -l /tmp/kola_*| wc -l")
 	if string(strings.Replace(string(out), "\n", "", -1)) != "7" {

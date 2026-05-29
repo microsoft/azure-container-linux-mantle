@@ -129,7 +129,7 @@ func init() {
 		Name:        "sysext.zfs.reboot",
 		Run:         checkSysextZfs,
 		ClusterSize: 0,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
 		MinVersion: semver.Version{Major: 3902},
@@ -140,10 +140,11 @@ func init() {
 		Name:        "sysext.zfs.docker",
 		Run:         checkZfsDocker,
 		ClusterSize: 0,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
 		MinVersion: semver.Version{Major: 3902},
+		Flags:      []register.Flag{register.NeedsDocker},
 		SkipFunc:   skipZfs,
 	})
 
@@ -151,7 +152,7 @@ func init() {
 		Name:        "sysext.zfs.nfs",
 		Run:         checkZfsNfs,
 		ClusterSize: 0,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
 		MinVersion: semver.Version{Major: 3902},

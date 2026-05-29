@@ -26,6 +26,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/vincent-petithory/dataurl"
 
+	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
 	"github.com/flatcar/mantle/platform/conf"
@@ -80,7 +81,7 @@ func init() {
 		// DO: https://github.com/coreos/bugs/issues/2205
 		// QEMU: https://github.com/coreos/ignition/issues/645
 		ExcludePlatforms: []string{"do", "qemu-unpriv"},
-		Distros:          []string{"cl", "fcos", "rhcos"},
+		Distros:          []string{"acl", "cl", "fcos", "rhcos"},
 		SkipFunc: func(version semver.Version, channel, arch, platform string) bool {
 			// LTS (3033) does not have the network-kargs service pulled in:
 			// https://github.com/flatcar/coreos-overlay/pull/1848/commits/9e04bc12c3c7eb38da05173dc0ff7beaefa13446
@@ -94,6 +95,12 @@ func securityTLS(c cluster.TestCluster) {
 	server := c.Machines()[0]
 
 	ip := server.PrivateIP()
+
+	if kola.Options.Distribution == "acl" {
+		// Open firewall for inter-node traffic (ACL has INPUT DROP policy).
+		// CIDR is configurable via --trusted-source-cidr; defaults to 10.0.0.0/8.
+		c.MustSSH(server, fmt.Sprintf("sudo iptables -A INPUT -s %s -j ACCEPT", kola.Options.TrustedSourceCIDR))
+	}
 
 	c.MustSSH(server, "sudo mkdir /var/tls")
 	c.MustSSH(server, "sudo openssl ecparam -genkey -name secp384r1 -out /var/tls/server.key")

@@ -21,9 +21,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/flatcar/mantle/platform/machine/stackit"
@@ -445,7 +448,29 @@ func RunTests(patterns []string, channel, offering, pltfrm, outputDir string, ss
 	}
 	(*flight.GetBaseFlight()).AdditionalSshKeys = sshKeys
 	if remove {
-		defer flight.Destroy()
+		// Use sync.Once to ensure Destroy is called exactly once,
+		// whether triggered by defer or signal handler.
+		var destroyOnce sync.Once
+		destroyFlight := func() {
+			destroyOnce.Do(func() {
+				flight.Destroy()
+			})
+		}
+
+		// Ensure cleanup on signals (SIGINT, SIGTERM, SIGQUIT).
+		// Go defers do not run when the process is killed by a signal,
+		// so we must catch signals explicitly to avoid leaking cloud
+		// resources (e.g. Azure resource groups).
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+		go func() {
+			sig := <-sigCh
+			plog.Warningf("Received signal %v, destroying flight resources...", sig)
+			destroyFlight()
+			os.Exit(1)
+		}()
+		defer signal.Stop(sigCh)
+		defer destroyFlight()
 	}
 
 	if !haveVersion && hasPattern(patterns) {
@@ -468,12 +493,14 @@ func RunTests(patterns []string, channel, offering, pltfrm, outputDir string, ss
 		plog.Fatal(err)
 	}
 
-	if disableSELinuxAVCChecks || (haveVersion && imageSemver.LessThan(semver.Version{Major: AVCChecksMajorVersion})) {
+	if disableSELinuxAVCChecks || (haveVersion && Options.Distribution != "acl" && imageSemver.LessThan(semver.Version{Major: AVCChecksMajorVersion})) {
 		// If the version is < AVCChecksMajorVersion, we skip
 		// AVC checks completely. This is to avoid test
 		// failures on older Flatcar versions where we expect
 		// this kind of issues to show up and we won't fix
-		// them.
+		// them. ACL uses its own (much lower) version
+		// numbering but always ships the modern policy, so
+		// the version-based skip does not apply to it.
 		for _, t := range tests {
 			t.Flags = append(t.Flags, register.NoSELinuxAVCChecks)
 		}
@@ -551,12 +578,13 @@ func getClusterSemver(flight platform.Flight, outputDir string) (*semver.Version
 		return nil, fmt.Errorf("parsing /etc/os-release for BUILD_ID: %v: %s", err, stderr)
 	}
 	build_id := strings.Split(string(out), "=")[1]
-	if strings.HasPrefix(build_id, "dev-main-nightly-") || strings.HasPrefix(build_id, "dev-flatcar-master-") {
+	if strings.HasPrefix(build_id, "dev-main-nightly-") || strings.HasPrefix(build_id, "dev-flatcar-master-") || strings.HasPrefix(build_id, "dev-acl-master-") {
 		// "main" is a nightly build of the main branch,
 		// "flatcar-master" refers to the manifest branch where dev builds are started
+		// "acl-master" refers to the manifest branch where ACL dev builds are started
 		ver = "999999.99.99"
-	} else if strings.HasPrefix(build_id, "dev-flatcar-") {
-		// flatcar-MAJOR is a nightly build of the release branch
+	} else if strings.HasPrefix(build_id, "dev-flatcar-") || strings.HasPrefix(build_id, "dev-acl-") {
+		// flatcar-MAJOR or acl-MAJOR is a nightly build of the release branch
 		parts := strings.Split(build_id, "-")
 		major := parts[2]
 		if major == "lts" {
@@ -568,7 +596,7 @@ func getClusterSemver(flight platform.Flight, outputDir string) (*semver.Version
 
 	// TODO: add distro specific version handling
 	switch Options.Distribution {
-	case "cl":
+	case "acl", "cl":
 		return parseCLVersion(ver)
 	case "rhcos":
 		return &semver.Version{}, nil
@@ -598,6 +626,7 @@ func runTest(h *harness.H, t *register.Test, pltfrm string, flight platform.Flig
 		NoSSHKeyInMetadata: t.HasFlag(register.NoSSHKeyInMetadata),
 		NoEnableSelinux:    t.HasFlag(register.NoEnableSelinux),
 		NoDisableUpdates:   t.HasFlag(register.NoDisableUpdates),
+		IncludeDocker:      t.HasFlag(register.NeedsDocker),
 		SSHRetries:         Options.SSHRetries,
 		SSHTimeout:         Options.SSHTimeout,
 		DefaultUser:        t.DefaultUser,
@@ -783,7 +812,7 @@ func CheckConsole(output []byte, t *register.Test) []string {
 func SetupOutputDir(outputDir, platform string) (string, error) {
 	defaulted := outputDir == ""
 	defaultBaseDirName := "_kola_temp"
-	defaultDirName := fmt.Sprintf("%s-%s-%d", platform, time.Now().Format("2006-01-02-1504"), os.Getpid())
+	defaultDirName := fmt.Sprintf("%s-%s-%d", platform, time.Now().Format("2006-01-02-150405"), os.Getpid())
 
 	if defaulted {
 		if _, err := os.Stat(defaultBaseDirName); os.IsNotExist(err) {

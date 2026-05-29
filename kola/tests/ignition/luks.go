@@ -15,7 +15,7 @@ func init() {
 		Name:        "cl.ignition.luks",
 		Run:         luksTest,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
 		MinVersion: semver.Version{Major: 3185},

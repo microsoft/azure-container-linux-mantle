@@ -125,6 +125,35 @@ etcd:
   listen_client_urls: http://0.0.0.0:2379`)
 )
 
+// etcdConfigAclWithCIDR returns the ACL etcd-node Container Linux Config with
+// an iptables INPUT ACCEPT rule for the given source CIDR, which lets the
+// master/worker nodes reach etcd:2379. CIDR is taken from
+// --trusted-source-cidr (default 10.0.0.0/8 in platform.Options).
+func etcdConfigAclWithCIDR(cidr string) *conf.UserData {
+	return conf.ContainerLinuxConfig(fmt.Sprintf(`
+etcd:
+  version: 3.5.22
+  advertise_client_urls: http://{PRIVATE_IPV4}:2379
+  listen_client_urls: http://0.0.0.0:2379
+systemd:
+  units:
+    - name: "etcd-firewall.service"
+      enabled: true
+      contents: |-
+        [Unit]
+        Description=Open firewall for etcd inter-node traffic
+        Before=etcd-member.service
+        After=iptables.service
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=true
+        ExecStart=/usr/sbin/iptables -A INPUT -s %s -j ACCEPT
+
+        [Install]
+        WantedBy=multi-user.target`, cidr))
+}
+
 func init() {
 	testConfigCgroupV1 := map[string]map[string]interface{}{}
 	testConfigCgroupV1["v1.32.4"] = map[string]interface{}{}
@@ -136,7 +165,7 @@ func init() {
 	registerTests := func(config map[string]map[string]interface{}) {
 		for version, params := range config {
 			for _, CNI := range CNIs {
-				flags := []register.Flag{}
+				flags := []register.Flag{register.NeedsDocker}
 				// ugly but required to remove the reference between params and the params
 				// actually used by the test.
 				testParams := make(map[string]interface{})
@@ -170,7 +199,7 @@ func init() {
 
 				register.Register(&register.Test{
 					Name:    fmt.Sprintf("kubeadm.%s.%s%s.base", version, CNI, cgroupSuffix),
-					Distros: []string{"cl"},
+					Distros: []string{"acl", "cl"},
 					// This should run on all clouds as a good end-to-end test
 					// Network config problems in qemu-unpriv
 					ExcludePlatforms: []string{"qemu-unpriv"},
@@ -312,7 +341,11 @@ func render(s string, p map[string]interface{}, b bool) (*bytes.Buffer, error) {
 func setup(c cluster.TestCluster, params map[string]interface{}) (platform.Machine, error) {
 	plog.Infof("creating etcd node")
 
-	etcdNode, err := c.NewMachine(etcdConfig)
+	useConfig := etcdConfig
+	if kola.Options.Distribution == "acl" {
+		useConfig = etcdConfigAclWithCIDR(kola.Options.TrustedSourceCIDR)
+	}
+	etcdNode, err := c.NewMachine(useConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create etcd node: %w", err)
 	}
@@ -357,6 +390,13 @@ func setup(c cluster.TestCluster, params map[string]interface{}) (platform.Machi
 	}
 
 	params["MasterScript"] = mScript.String()
+
+	openFirewall := false
+	if kola.Options.Distribution == "acl" {
+		openFirewall = true
+	}
+	params["openFirewall"] = openFirewall
+	params["TrustedCIDR"] = kola.Options.TrustedSourceCIDR
 
 	masterCfg, err := render(masterConfig, params, false)
 	if err != nil {

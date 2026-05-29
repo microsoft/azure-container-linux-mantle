@@ -32,7 +32,7 @@ func init() {
 		Run:         SelinuxEnforce,
 		ClusterSize: 1,
 		Name:        "coreos.selinux.enforce",
-		Distros:     []string{"cl", "fcos", "rhcos"},
+		Distros:     []string{"acl", "cl", "fcos", "rhcos"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -40,7 +40,7 @@ func init() {
 		Run:         SelinuxBoolean,
 		ClusterSize: 1,
 		Name:        "coreos.selinux.boolean",
-		Distros:     []string{"cl", "fcos", "rhcos"},
+		Distros:     []string{"acl", "cl", "fcos", "rhcos"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 		SkipFunc: func(version semver.Version, channel, arch, platform string) bool {

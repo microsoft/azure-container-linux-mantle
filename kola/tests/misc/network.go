@@ -34,10 +34,11 @@ func init() {
 		Run:         NetworkListeners,
 		ClusterSize: 1,
 		Name:        "cl.network.listeners",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment unless the OEM tools would unexpectedly listen on ports
 		Platforms: []string{"qemu", "qemu-unpriv"},
 		// be sure to notice listeners in the docker stack
+		Flags: []register.Flag{register.NeedsDocker},
 		UserData: conf.ContainerLinuxConfig(`systemd:
   units:
     - name: docker.service
@@ -48,7 +49,7 @@ func init() {
 		Run:         NetworkListeners,
 		ClusterSize: 1,
 		Name:        "cl.network.listeners.legacy",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		EndVersion:  semver.Version{Major: 1967},
 		// This test is normally not related to the cloud environment unless the OEM tools would unexpectedly listen on ports
 		Platforms: []string{"qemu", "qemu-unpriv"},
@@ -61,11 +62,18 @@ func init() {
 		Distros:          []string{"cl"},
 	})
 	register.Register(&register.Test{
+		Run:              NetworkInitramfsSecondBoot,
+		ClusterSize:      1,
+		Name:             "acl.network.initramfs.second-boot",
+		ExcludePlatforms: []string{"do", "azure"},
+		Distros:          []string{"acl"},
+	})
+	register.Register(&register.Test{
 		MinVersion:  semver.Version{Major: 3185},
 		Run:         wireguard,
 		ClusterSize: 1,
 		Name:        "cl.network.wireguard",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		Platforms:   []string{"qemu", "qemu-unpriv", "esx", "azure"},
 		UserData: conf.Butane(`---
 variant: flatcar
@@ -110,7 +118,7 @@ systemd:
 		MinVersion:  semver.Version{Major: 4345},
 		Name:        "cl.network.nftables",
 		Platforms:   []string{"qemu", "qemu-uefi", "azure"},
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		UserData: conf.Butane(`---
 variant: flatcar
 version: 1.0.0
@@ -137,7 +145,7 @@ systemd:
 		ClusterSize: 1,
 		Name:        "cl.network.iptables",
 		Platforms:   []string{"qemu", "qemu-uefi", "azure"},
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		UserData: conf.Butane(`---
 variant: flatcar
 version: 1.0.0
@@ -190,17 +198,29 @@ func checkListeners(c cluster.TestCluster, expectedListeners []listener) error {
 NextProcess:
 	for _, line := range processes {
 		parts := strings.Fields(line)
-		// One gotcha: udp's 'state' field is optional, so it's possible to have 6
-		// or 7 parts depending on that.
-		if len(parts) != 6 && len(parts) != 7 {
+		// Need at least 6 fields: proto, recv-q, send-q, local addr, foreign addr, PID/program
+		// UDP may omit state (6 parts), TCP has state (7+ parts).
+		// The PID/Program name field can contain spaces (e.g. "sshd: /usr/sbi"),
+		// so we may see more than 7 parts.
+		if len(parts) < 6 {
 			c.Fatalf("unexpected number of parts on line: %q in output %q", line, output)
 		}
 		proto := parts[0]
 		portdata := strings.Split(parts[3], ":")
 		port := portdata[len(portdata)-1]
-		pidProgramParts := strings.SplitN(parts[len(parts)-1], "/", 2)
+		// For TCP, state is always at parts[5], PID/Program starts at parts[6].
+		// For UDP, state is optional: if parts[5] contains "/" it's PID/Program directly.
+		pidProgramIdx := 6
+		if strings.HasPrefix(proto, "udp") && strings.Contains(parts[5], "/") {
+			pidProgramIdx = 5
+		}
+		if pidProgramIdx >= len(parts) {
+			c.Fatalf("missing PID/Program field on line: %q in output %q", line, output)
+		}
+		pidProgram := strings.Join(parts[pidProgramIdx:], " ")
+		pidProgramParts := strings.SplitN(pidProgram, "/", 2)
 		if len(pidProgramParts) != 2 {
-			c.Errorf("%v did not contain pid and program parts; full output: %q", parts[6], output)
+			c.Errorf("%v did not contain pid and program parts; full output: %q", pidProgram, output)
 			continue
 		}
 		pid, process := pidProgramParts[0], pidProgramParts[1]

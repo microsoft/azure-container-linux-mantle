@@ -163,7 +163,7 @@ LinkLocalAddressing=no
 	if err != nil {
 		return nil, fmt.Errorf("failed to canonicalize firmware path: %v", err)
 	}
-	qmCmd, extraFiles, err := platform.CreateQEMUCommand(qc.flight.opts.Board, qm.id, firmware, ovmfVars, qm.consolePath, confPath, qc.flight.diskImagePath, qc.flight.opts.EnableSecureboot, conf.IsIgnition(), options)
+	qmCmd, extraFiles, err := platform.CreateQEMUCommand(qc.flight.opts.Board, qm.id, firmware, ovmfVars, qm.consolePath, confPath, qc.flight.diskImagePath, "", qc.flight.opts.EnableSecureboot, conf.IsIgnition(), options)
 	if err != nil {
 		return nil, err
 	}

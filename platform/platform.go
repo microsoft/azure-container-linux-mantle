@@ -178,6 +178,14 @@ type Options struct {
 	// A duration of a single try of establishing the connection
 	// when creating a journal or when doing a machine check.
 	SSHTimeout time.Duration
+
+	// TrustedSourceCIDR is the source CIDR that some kola tests whitelist
+	// in iptables on cluster nodes to allow inter-node traffic when the
+	// distro has a default-DROP INPUT policy (e.g. ACL). Defaults to
+	// 10.0.0.0/8 to cover any RFC1918 10/8 subnet that the platform driver
+	// or a caller-supplied BYO-VNet might place test VMs in. Override via
+	// --trusted-source-cidr to narrow the scope.
+	TrustedSourceCIDR string
 }
 
 // RuntimeConfig contains cluster-specific configuration.
@@ -189,6 +197,7 @@ type RuntimeConfig struct {
 	NoEnableSelinux    bool          // don't enable selinux when starting or rebooting a machine
 	NoDisableUpdates   bool          // don't disable usage of the public update server
 	AllowFailedUnits   bool          // don't fail CheckMachine if a systemd unit has failed
+	IncludeDocker      bool          // enable docker sysext
 	SSHRetries         int           // see SSHRetries field in Options
 	SSHTimeout         time.Duration // see SSHTimeout field in Options
 
@@ -379,8 +388,9 @@ func CheckMachine(ctx context.Context, m Machine) error {
 		return fmt.Errorf("no /etc/os-release file: %v: %s", err, stderr)
 	}
 
-	if !bytes.Equal(out, []byte("ID=flatcar")) {
-		return fmt.Errorf("not a Flatcar Container Linux instance")
+	// Accept both Flatcar and Azure Linux (Azure Container Linux) as valid distros
+	if !bytes.Equal(out, []byte("ID=flatcar")) && !bytes.Equal(out, []byte("ID=azurelinux")) {
+		return fmt.Errorf("not a Flatcar Container Linux or Azure Container Linux instance (got %q)", string(out))
 	}
 
 	if !m.RuntimeConf().AllowFailedUnits {

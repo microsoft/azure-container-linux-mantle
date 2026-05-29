@@ -1,0 +1,39 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Using Azure Linux from MCR to avoid Docker Hub pulls
+# Golang is installed via tdnf packages
+
+FROM --platform=linux/amd64 mcr.microsoft.com/azurelinux/base/core:3.0 AS builder-amd64
+RUN tdnf install -y golang gcc glibc-devel kernel-headers binutils git ca-certificates
+# We use dynamic linking when possible to reduce compile time and binary size
+ENV CGO_ENABLED=1
+ENV GOEXPERIMENT=nosystemcrypto
+COPY . /usr/src/mantle
+# Build amd64 binaries (with CGO), then arm64 binaries (CGO_ENABLED=0)
+RUN bash -c 'cd /usr/src/mantle && ./build ; mv bin bin-amd64 ; CGO_ENABLED=0 GOARCH=arm64 ./build ; mv bin bin-arm64'
+
+FROM mcr.microsoft.com/azurelinux/base/core:3.0
+LABEL base_image="azurelinux:3.0"
+RUN tdnf update -y && tdnf upgrade -y
+
+# Install packages via tdnf (retry loop for transient failures)
+RUN for i in $(seq 1 5); do \
+    if tdnf install -y \
+        azure-cli bzip2 ca-certificates curl dnsmasq gawk git gnupg2 iptables jq \
+        nftables edk2-ovmf python3 qemu-system-aarch64 qemu-system-x86 \
+        qemu-img seabios sqlite sudo swtpm zstd; then \
+            echo "succeeded at ${i}"; \
+            break; \
+    elif test $i -eq 5; then \
+        echo "fail at ${i}!"; \
+        exit 1; \
+    fi; \
+  done
+
+COPY --from=builder-amd64 /usr/src/mantle/bin-amd64 /usr/local/bin-amd64
+COPY --from=builder-amd64 /usr/src/mantle/bin-arm64 /usr/local/bin-arm64
+RUN bash -c 'if [ "$(uname -m)" == "x86_64" ]; then rm -rf /usr/local/bin /usr/local/bin-arm64 ; mv /usr/local/bin-amd64 /usr/local/bin ; else rm -rf /usr/local/bin /usr/local/bin-amd64 ; mv /usr/local/bin-arm64 /usr/local/bin ; fi'
+RUN ln -sf /usr/share/seabios/bios-256k.bin /usr/share/qemu/bios-256k.bin
+
+# For KVM to work, run the resulting container as: docker run --privileged --net host -v /dev:/dev --rm -it TAG

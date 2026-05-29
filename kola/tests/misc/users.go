@@ -15,10 +15,10 @@
 package misc
 
 import (
-	"strings"
-
+	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
+	"strings"
 )
 
 func init() {
@@ -27,7 +27,7 @@ func init() {
 		ClusterSize:      1,
 		ExcludePlatforms: []string{"gce"},
 		Name:             "cl.users.shells",
-		Distros:          []string{"cl"},
+		Distros:          []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -63,6 +63,26 @@ func CheckUserShells(c cluster.TestCluster) {
 			// but /bin/sh is anyway a symlink to /bin/bash
 			shell = "/bin/bash"
 		}
+
+		if kola.Options.Distribution == "acl" {
+			// Accept common non-login shells across distros, ACL uses /bin/false.
+			NonLoginShells := map[string]bool{
+				"/sbin/nologin":     true,
+				"/usr/sbin/nologin": true,
+				"/usr/bin/nologin":  true,
+				"/bin/false":        true,
+				"/usr/bin/false":    true,
+			}
+
+			// Upstream logic, generalized for ACL:
+			// flag only if shell is neither expected nor a non-login shell.
+			if shell != ValidUsers[username] && !NonLoginShells[shell] {
+				badusers = append(badusers, user)
+			}
+			continue
+		}
+
+		// Upstream logic.
 		if shell != ValidUsers[username] && shell != "/sbin/nologin" {
 			badusers = append(badusers, user)
 		}

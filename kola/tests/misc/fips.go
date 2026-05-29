@@ -4,6 +4,7 @@ package misc
 
 import (
 	"github.com/coreos/go-semver/semver"
+	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
 	"github.com/flatcar/mantle/platform/conf"
@@ -45,6 +46,61 @@ storage:
           activate = 1`),
 	})
 
+	register.Register(&register.Test{
+		Run:         fipsTest,
+		ClusterSize: 1,
+		Name:        `acl.misc.fips`,
+		MinVersion:  semver.Version{Major: 3549},
+		Distros:     []string{"acl"},
+		// This test is normally not related to the cloud environment
+		Platforms: []string{"qemu", "qemu-unpriv"},
+		// ACL ships with fips.addon.efi in a backup location but not activated.
+		// Use Ignition to copy it to the active UKI addon dir, create the
+		// /etc/system-fips marker, and reboot so the kernel picks up fips=1.
+		UserData: conf.Butane(`---
+version: 1.0.0
+variant: flatcar
+storage:
+  files:
+    - path: /etc/system-fips
+    - path: /opt/acl-activate-fips
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          set -euo pipefail
+          TEMPLATE="/boot/acl/uki-addons/fips.addon.efi"
+          ADDON_DIR="/boot/EFI/Linux/acl.efi.extra.d"
+          if [[ -f "${TEMPLATE}" ]] && [[ ! -f "${ADDON_DIR}/fips.addon.efi" ]]; then
+            mkdir -p "${ADDON_DIR}"
+            cp "${TEMPLATE}" "${ADDON_DIR}/fips.addon.efi"
+            sync
+            systemctl reboot --force
+          else
+            echo "Error activating FIPS addon: template ${TEMPLATE} not found or addon already exists." >&2
+            exit 1
+          fi
+systemd:
+  units:
+    - name: acl-activate-fips.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Activate FIPS addon for UKI
+        DefaultDependencies=no
+        After=local-fs.target
+        Before=basic.target
+        RequiresMountsFor=/boot
+        ConditionPathExists=!/boot/EFI/Linux/acl.efi.extra.d/fips.addon.efi
+
+        [Service]
+        Type=oneshot
+        ExecStart=/opt/acl-activate-fips
+
+        [Install]
+        WantedBy=sysinit.target`),
+	})
+
 }
 
 func fipsTest(c cluster.TestCluster) {
@@ -53,12 +109,19 @@ func fipsTest(c cluster.TestCluster) {
 	// It works because SHA is FIPS compliant.
 	c.MustSSH(m, "echo Flatcar | openssl sha512 -")
 
-	// Should exit with 0.
-	c.MustSSH(m, "openssl list -provider fips")
+	// ACL uses SymCrypt; CL uses the standard OpenSSL FIPS provider.
+	if kola.Options.Distribution == "acl" {
+		c.MustSSH(m, "openssl list -providers | grep -q symcryptprovider")
+	} else {
+		c.MustSSH(m, "openssl list -provider fips")
+	}
 
-	// It does not work because MD5 is not FIPS compliant.
-	if _, err := c.SSH(m, "echo Flatcar | openssl md5 -"); err == nil {
-		c.Fatal("MD5 hash algorithm should raise an error with FIPS mode.")
+	// MD5 is not FIPS compliant. But for ACL With SymCrypt in FIPS mode,
+	// MD5 is still supported, so skip this assertion on ACL.
+	if kola.Options.Distribution != "acl" {
+		if _, err := c.SSH(m, "echo Flatcar | openssl md5 -"); err == nil {
+			c.Fatal("MD5 hash algorithm should raise an error with FIPS mode.")
+		}
 	}
 
 	c.AssertCmdOutputContains(m, "cat /proc/sys/crypto/fips_enabled", "1")

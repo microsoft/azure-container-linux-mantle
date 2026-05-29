@@ -33,7 +33,7 @@ func init() {
 		// brightbox does not support yet adding SSH keys to the metadata service.
 		// akamai does not provide SSH keys as metadata (https://github.com/coreos/afterburn/issues/1111)
 		ExcludePlatforms: []string{"qemu", "esx", "brightbox", "akamai"},
-		Distros:          []string{"cl"},
+		Distros:          []string{"acl", "cl"},
 		// The userdata injection of disabling the update server won't work
 		// for an empty config, we still take care of doing later it via SSH
 		Flags:    []register.Flag{register.NoDisableUpdates, register.NoSSHKeyInUserData},
@@ -46,7 +46,7 @@ func init() {
 		Run:              empty,
 		ClusterSize:      1,
 		ExcludePlatforms: []string{"qemu", "esx", "openstack", "brightbox", "akamai"},
-		Distros:          []string{"cl"},
+		Distros:          []string{"acl", "cl"},
 		Flags:            []register.Flag{register.NoSSHKeyInUserData},
 		UserData:         conf.Ignition(`{"ignitionVersion": 1}`),
 		// Should run on all cloud environments
@@ -56,7 +56,7 @@ func init() {
 		Run:              empty,
 		ClusterSize:      1,
 		ExcludePlatforms: []string{"qemu", "esx", "brightbox", "akamai"},
-		Distros:          []string{"cl"},
+		Distros:          []string{"acl", "cl"},
 		Flags:            []register.Flag{register.NoSSHKeyInUserData},
 		UserData:         conf.Ignition(`{"ignition":{"version":"2.0.0"}}`),
 		MinVersion:       semver.Version{Major: 3227},

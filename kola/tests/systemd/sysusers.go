@@ -24,7 +24,7 @@ func init() {
 		Run:         gshadowParser,
 		ClusterSize: 1,
 		Name:        "systemd.sysusers.gshadow",
-		Distros:     []string{"cl", "fcos"},
+		Distros:     []string{"acl", "cl", "fcos"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})

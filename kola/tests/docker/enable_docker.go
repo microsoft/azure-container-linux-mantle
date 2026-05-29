@@ -40,13 +40,14 @@ func init() {
 		Name:      "docker.enable-service.torcx",
 		// Torcx was retired after release 3760.
 		EndVersion: semver.Version{Major: 3760},
+		Flags:      []register.Flag{register.NeedsDocker},
 		UserData: conf.ContainerLinuxConfig(`
 systemd:
   units:
   - name: docker.service
     enabled: true
 `),
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 	})
 
 	register.Register(&register.Test{
@@ -56,6 +57,7 @@ systemd:
 		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
 		Name:       "docker.enable-service.sysext",
 		MinVersion: semver.Version{Major: 3746},
+		Flags:      []register.Flag{register.NeedsDocker},
 		UserData: conf.Butane(`
 variant: flatcar
 version: 1.0.0
@@ -72,7 +74,7 @@ storage:
 `),
 		// TODO FIXME: Convert this to a multi-user.target.upholds/docker.service symlink
 		// after we switch to systemd-254.
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 	})
 }
 

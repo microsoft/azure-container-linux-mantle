@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
 )
@@ -27,7 +28,7 @@ func init() {
 		Run:         Filesystem,
 		ClusterSize: 1,
 		Name:        "cl.filesystem",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv"},
 	})
@@ -97,6 +98,10 @@ func DeadLinks(c cluster.TestCluster) {
 		"/usr/share/flatcar/etc",
 	}
 
+	if kola.Options.Distribution == "acl" {
+		ignore = append(ignore, "/usr/share/distro/etc")
+	}
+
 	output := c.MustSSH(m, fmt.Sprintf("sudo find / -ignore_readdir_race -path %s -prune -o -xtype l -print", strings.Join(ignore, " -prune -o -path ")))
 
 	if string(output) != "" {
@@ -130,6 +135,12 @@ func SUIDFiles(c cluster.TestCluster) {
 		"/usr/libexec/dbus-daemon-launch-helper",
 		"/usr/sbin/mount.nfs",
 		"/usr/sbin/unix_chkpwd",
+	}
+
+	if kola.Options.Distribution == "acl" {
+		validfiles = append(validfiles,
+			"/usr/libexec/ssh-keysign",
+		)
 	}
 
 	sugidFiles(c, validfiles, "4000")
@@ -208,7 +219,6 @@ func Blacklist(c cluster.TestCluster) {
 	blacklist := []string{
 		// Things excluded from the image that might slip in
 		"/usr/bin/perl",
-		"/usr/bin/python",
 		"/usr/share/man",
 
 		// net-tools "make install" copies binaries from
@@ -224,6 +234,11 @@ func Blacklist(c cluster.TestCluster) {
 		"* *",
 		// DEL
 		"*\x7f*",
+	}
+
+	// ACL ships a /usr/bin/python -> python3 symlink
+	if kola.Options.Distribution != "acl" {
+		blacklist = append(blacklist, "/usr/bin/python")
 	}
 
 	output := c.MustSSH(m, fmt.Sprintf("sudo find / -ignore_readdir_race -path %s -prune -o -path '%s' -print", strings.Join(skip, " -prune -o -path "), strings.Join(blacklist, "' -print -o -path '")))

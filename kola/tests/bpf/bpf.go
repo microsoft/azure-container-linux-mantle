@@ -36,10 +36,10 @@ func init() {
 		Run:         execsnoopTest,
 		ClusterSize: 1,
 		Name:        `bpf.execsnoop`,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// required while SELinux policy is not correcly updated to support
 		// `bpf` and `perfmon` permission.
-		Flags: []register.Flag{register.NoEnableSelinux},
+		Flags: []register.Flag{register.NoEnableSelinux, register.NeedsDocker},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})

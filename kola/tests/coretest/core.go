@@ -75,6 +75,26 @@ func init() {
 		},
 		Distros: []string{"cl"},
 	})
+	// acl.basic removes UpdateEngineKeys test, and does not check for update-engine.service
+	register.Register(&register.Test{
+		Name:        "acl.basic",
+		Run:         LocalTests,
+		ClusterSize: 1,
+		NativeFuncs: map[string]func() error{
+			"CloudConfig":    TestCloudinitCloudConfig,
+			"Script":         TestCloudinitScript,
+			"PortSSH":        TestPortSsh,
+			"DbusPerms":      TestDbusPerms,
+			"Symlink":        TestSymlinkResolvConfACL,
+			"ServicesActive": TestServicesActiveACL,
+			"ReadOnly":       TestReadOnlyFs,
+			"RandomUUID":     TestFsRandomUUID,
+			"Useradd":        TestUseradd,
+			"MachineID":      TestMachineID,
+		},
+		Distros: []string{"acl"},
+		Flags:   []register.Flag{register.NeedsDocker},
+	})
 	register.Register(&register.Test{
 		Name:        "rhcos.basic",
 		Run:         LocalTests,
@@ -117,6 +137,19 @@ func init() {
 			"NTPDate":      TestNTPDate,
 		},
 		Distros: []string{"cl"},
+	})
+	// acl.internet removes UpdateEngine test
+	register.Register(&register.Test{
+		Name:        "acl.internet",
+		Run:         InternetTests,
+		ClusterSize: 1,
+		NativeFuncs: map[string]func() error{
+			"DockerPing": TestDockerPing,
+			"DockerEcho": TestDockerEcho,
+			"NTPDate":    TestNTPDate,
+		},
+		Distros: []string{"acl"},
+		Flags:   []register.Flag{register.NeedsDocker},
 	})
 }
 
@@ -247,6 +280,14 @@ func TestDbusPerms() error {
 }
 
 func TestSymlinkResolvConf() error {
+	return testSymlinkResolvConf("/run/systemd/resolve/resolv.conf")
+}
+
+func TestSymlinkResolvConfACL() error {
+	return testSymlinkResolvConf("/run/systemd/resolve/stub-resolv.conf")
+}
+
+func testSymlinkResolvConf(expected string) error {
 	//t.Parallel()
 	f, err := os.Lstat("/etc/resolv.conf")
 	if err != nil {
@@ -260,7 +301,7 @@ func TestSymlinkResolvConf() error {
 	if err != nil {
 		return fmt.Errorf("SymlinkResolvConf: readlink: %v", err)
 	}
-	if target != "/run/systemd/resolve/resolv.conf" {
+	if target != expected {
 		return fmt.Errorf("/etc/resolv.conf points at the wrong file: %s", target)
 	}
 	return nil
@@ -324,6 +365,17 @@ func TestServicesActive() error {
 		"multi-user.target",
 		"docker.socket",
 		"update-engine.service",
+	}, []string{
+		"systemd-timesyncd.service",
+		"chronyd.service",
+		"ntpd.service",
+	})
+}
+
+func TestServicesActiveACL() error {
+	return servicesActive([]string{
+		"multi-user.target",
+		"docker.socket",
 	}, []string{
 		"systemd-timesyncd.service",
 		"chronyd.service",

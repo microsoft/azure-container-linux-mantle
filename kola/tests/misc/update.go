@@ -41,31 +41,34 @@ var (
 
 func init() {
 	register.Register(&register.Test{
-		Run:         RebootIntoUSRB,
-		ClusterSize: 1,
-		Name:        "cl.update.reboot",
-		UserData:    disableUpdateEngine,
-		Distros:     []string{"cl"},
+		Run:            RebootIntoUSRB,
+		ClusterSize:    1,
+		Name:           "cl.update.reboot",
+		UserData:       disableUpdateEngine,
+		Distros:        []string{"cl"},
+		ExcludeDistros: []string{"acl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
 	register.Register(&register.Test{
-		Run:         RecoverBadVerity,
-		ClusterSize: 1,
-		Name:        "cl.update.badverity",
-		Flags:       []register.Flag{register.NoEmergencyShellCheck, register.NoKernelPanicCheck},
-		UserData:    disableUpdateEngine,
-		Distros:     []string{"cl"},
+		Run:            RecoverBadVerity,
+		ClusterSize:    1,
+		Name:           "cl.update.badverity",
+		Flags:          []register.Flag{register.NoEmergencyShellCheck, register.NoKernelPanicCheck},
+		UserData:       disableUpdateEngine,
+		Distros:        []string{"cl"},
+		ExcludeDistros: []string{"acl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
 	register.Register(&register.Test{
-		Run:         RecoverBadUsr,
-		ClusterSize: 1,
-		Name:        "coreos.update.badusr",
-		Flags:       []register.Flag{register.NoEmergencyShellCheck},
-		UserData:    disableUpdateEngine,
-		Distros:     []string{"cl"},
+		Run:            RecoverBadUsr,
+		ClusterSize:    1,
+		Name:           "coreos.update.badusr",
+		Flags:          []register.Flag{register.NoEmergencyShellCheck},
+		UserData:       disableUpdateEngine,
+		Distros:        []string{"cl"},
+		ExcludeDistros: []string{"acl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})

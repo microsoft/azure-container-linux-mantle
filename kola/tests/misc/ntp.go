@@ -39,7 +39,7 @@ func init() {
 		// This test is normally not related to the cloud environment
 		Platforms:        []string{"qemu"},
 		ExcludePlatforms: []string{"qemu-unpriv"},
-		Distros:          []string{"cl"},
+		Distros:          []string{"acl", "cl"},
 	})
 }
 
@@ -50,6 +50,7 @@ func NTP(c cluster.TestCluster) {
 		c.Fatalf("Cluster.NewMachine: %s", err)
 	}
 
+	// Flatcar and ACL keep eth0 as the primary virtio NIC name.
 	out := c.MustSSH(m, "networkctl status eth0")
 	if !bytes.Contains(out, []byte("NTP: 10.0.0.1")) {
 		c.Fatalf("Bad network config:\n%s", out)

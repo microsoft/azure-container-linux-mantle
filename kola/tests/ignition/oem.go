@@ -76,7 +76,7 @@ func init() {
 		Name:        "cl.ignition.oem.regular",
 		Run:         reusePartitionOld,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test overwrites the grub.cfg which does not work on cloud environments after reboot
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3549},
@@ -86,7 +86,7 @@ func init() {
 		Name:        "cl.ignition.oem.regular.new",
 		Run:         reusePartitionNew,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test overwrites the grub.cfg which does not work on cloud environments after reboot
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3620},
@@ -98,7 +98,7 @@ func init() {
 		Name:        "cl.ignition.oem.indirect",
 		Run:         reusePartitionOld,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test overwrites the grub.cfg which does not work on cloud environments after reboot
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3550},
@@ -110,7 +110,7 @@ func init() {
 		Name:        "cl.ignition.oem.indirect.new",
 		Run:         reusePartitionNew,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test overwrites the grub.cfg which does not work on cloud environments after reboot
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3620},
@@ -120,7 +120,7 @@ func init() {
 		Name:        "cl.ignition.oem.reuse",
 		Run:         reusePartitionOld,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test overwrites the grub.cfg which does not work on cloud environments after reboot
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 2983},
@@ -182,7 +182,7 @@ func reusePartition(c cluster.TestCluster, oemMountpoint string) {
 		c.Fatalf("did not find written grub entry: %s", string(grub))
 	}
 
-	out := c.MustSSH(c.Machines()[0], `lsblk --output FSTYPE,LABEL,MOUNTPOINT --json | jq -r '.blockdevices | .[] | select(.label=="OEM") | .fstype'`)
+	out := c.MustSSH(c.Machines()[0], `sudo lsblk --output FSTYPE,LABEL,MOUNTPOINT --json | jq -r '.blockdevices | .[] | select(.label=="OEM") | .fstype'`)
 
 	if string(out) != "btrfs" {
 		debug := c.MustSSH(c.Machines()[0], `lsblk --output FSTYPE,LABEL,MOUNTPOINT --json; echo ; lsblk`)
@@ -203,7 +203,7 @@ func reusePartition(c cluster.TestCluster, oemMountpoint string) {
 
 // wipeOEM asserts that if the config uses a different fs format with a wipe of the fs we effectively wipe the fs.
 func wipeOEM(c cluster.TestCluster) {
-	out := c.MustSSH(c.Machines()[0], `lsblk --output FSTYPE,LABEL,MOUNTPOINT --json | jq -r '.blockdevices | .[] | select(.label=="OEM") | .fstype'`)
+	out := c.MustSSH(c.Machines()[0], `sudo lsblk --output FSTYPE,LABEL,MOUNTPOINT --json | jq -r '.blockdevices | .[] | select(.label=="OEM") | .fstype'`)
 
 	if string(out) != "ext4" {
 		c.Fatalf("should get ext4, got: %s", string(out))

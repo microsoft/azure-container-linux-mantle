@@ -29,17 +29,47 @@ import (
 var plog = capnslog.NewPackageLogger("github.com/flatcar/mantle", "kola/tests/etcd")
 
 func init() {
-	register.Register(&register.Test{
-		Run:         Discovery,
-		ClusterSize: 3,
-		Name:        "cl.etcd-member.discovery",
-		UserData: conf.ContainerLinuxConfig(`etcd:
+	const discovery = `etcd:
   listen_client_urls:          http://0.0.0.0:2379
   advertise_client_urls:       http://{PRIVATE_IPV4}:2379
   listen_peer_urls:            http://{PRIVATE_IPV4}:2380
   initial_advertise_peer_urls: http://{PRIVATE_IPV4}:2380
-  discovery:                   $discovery`),
-		Distros: []string{"cl"},
+  discovery:                   $discovery`
+	const discoveryFirewall = `
+systemd:
+  units:
+    - name: open-etcd-ports.service
+      enabled: true
+      contents: |-
+        [Unit]
+        Description=Open firewall ports for etcd
+        Before=etcd-member.service
+        After=iptables.service
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=true
+        ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 2379 -j ACCEPT
+        ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 2380 -j ACCEPT
+
+        [Install]
+        WantedBy=multi-user.target`
+
+	register.Register(&register.Test{
+		Run:         Discovery,
+		ClusterSize: 3,
+		Name:        "cl.etcd-member.discovery",
+		UserData:    conf.ContainerLinuxConfig(discovery),
+		Distros:     []string{"cl"},
+		// Should run on all cloud environments to test CLC IP addr templating
+	})
+	register.Register(&register.Test{
+		Run:         Discovery,
+		ClusterSize: 3,
+		Name:        "acl.etcd-member.discovery",
+		UserData:    conf.ContainerLinuxConfig(discovery + discoveryFirewall),
+		Distros:     []string{"acl"},
+		Flags:       []register.Flag{register.NeedsDocker},
 		// Should run on all cloud environments to test CLC IP addr templating
 	})
 
@@ -57,9 +87,10 @@ etcd:
   initial_advertise_peer_urls: http://{PRIVATE_IPV4}:2380
   discovery:                   $discovery
   enable_v2:                   true`),
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		Flags:     []register.Flag{register.NeedsDocker},
 	})
 
 	register.Register(&register.Test{
@@ -76,9 +107,10 @@ etcd:
   listen_peer_urls:            http://0.0.0.0:2380
   initial_advertise_peer_urls: http://127.0.0.1:2380
 `, uuid.New())),
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		Flags:     []register.Flag{register.NeedsDocker},
 	})
 }
 

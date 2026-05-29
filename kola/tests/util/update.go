@@ -17,6 +17,7 @@ package util
 import (
 	"fmt"
 
+	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/platform"
 )
@@ -32,9 +33,13 @@ func AssertBootedUsr(c cluster.TestCluster, m platform.Machine, usr string) {
 func GetUsrDeviceNode(c cluster.TestCluster, m platform.Machine) string {
 	// The rootdev tool finds the backing block dev better than, e.g.,
 	// findmnt -fno SOURCE /usr and/or dmsetup info --noheadings -Co blkdevs_used usr
-	usrdev := c.MustSSH(m, "rootdev -s /usr")
-
-	return string(usrdev)
+	if kola.Options.Distribution != "acl" {
+		return string(c.MustSSH(m, "rootdev -s /usr"))
+	} else {
+		// ACL doesn't include seismograph, which includes rootdev
+		usrdev := c.MustSSH(m, "sudo dmsetup info --noheadings -Co blkdevs_used usr")
+		return "/dev/" + string(usrdev)
+	}
 }
 
 func InvalidateUsrPartition(c cluster.TestCluster, m platform.Machine, partition string) {

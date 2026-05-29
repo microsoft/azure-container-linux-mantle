@@ -19,6 +19,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
 	"github.com/flatcar/mantle/platform/conf"
@@ -26,7 +27,7 @@ import (
 )
 
 var (
-	nfsserverconf = conf.ContainerLinuxConfig(`storage:
+	nfsserver = `storage:
   files:
     - filesystem: "root"
       path: "/etc/hostname"
@@ -44,7 +45,33 @@ var (
 systemd:
   units:
     - name: "nfs-server.service"
-      enabled: true`)
+      enabled: true`
+	nfsserverconf = conf.ContainerLinuxConfig(nfsserver)
+	nfsserverAcl  = `
+    - name: "rpc-statd.service"
+      enabled: true
+    - name: "nfs-server.service"
+      enabled: true
+    - name: "nfs-firewall.service"
+      enabled: true
+      contents: |-
+        [Unit]
+        Description=Open firewall ports for NFS
+        Before=nfs-server.service
+        After=iptables.service
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=true
+        ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 2049 -j ACCEPT
+        ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 111 -j ACCEPT
+        ExecStart=/usr/sbin/iptables -A INPUT -p udp --dport 111 -j ACCEPT
+        ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 20048 -j ACCEPT
+        ExecStart=/usr/sbin/iptables -A INPUT -p udp --dport 20048 -j ACCEPT
+
+        [Install]
+        WantedBy=multi-user.target`
+	nfsserverconfAcl = conf.ContainerLinuxConfig(nfsserver + nfsserverAcl)
 )
 
 func init() {
@@ -52,7 +79,7 @@ func init() {
 		Run:         NFSv3,
 		ClusterSize: 0,
 		Name:        "linux.nfs.v3",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 
 		// Disabled on Azure because setting hostname
 		// is required at the instance creation level
@@ -72,7 +99,11 @@ func init() {
 }
 
 func testNFS(c cluster.TestCluster, nfsversion int, remotePath string) {
-	m1, err := c.NewMachine(nfsserverconf)
+	useConf := nfsserverconf
+	if kola.Options.Distribution == "acl" {
+		useConf = nfsserverconfAcl
+	}
+	m1, err := c.NewMachine(useConf)
 	if err != nil {
 		c.Fatalf("Cluster.NewMachine: %s", err)
 	}

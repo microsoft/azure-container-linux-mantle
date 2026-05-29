@@ -43,7 +43,7 @@ func init() {
 		NativeFuncs: map[string]func() error{
 			"Omaha": Serve,
 		},
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv"},
 		SkipFunc: func(version semver.Version, channel, arch, platform string) bool {
@@ -80,8 +80,8 @@ func init() {
 		// last boot logs, as the older logs may come from an
 		// old version of Flatcar that still has some AVC
 		// messages.
-		Flags:   []register.Flag{register.NoSELinuxAVCChecks},
-		Distros: []string{"cl"},
+		Flags:   []register.Flag{register.NoSELinuxAVCChecks, register.NeedsDocker},
+		Distros: []string{"acl", "cl"},
 	})
 	register.Register(&register.Test{
 		Name:        "cl.update.oem",
@@ -90,7 +90,7 @@ func init() {
 		NativeFuncs: map[string]func() error{
 			"Omaha": Serve,
 		},
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 		// This test uses its own OEM files and shouldn't run on other platforms
 		Platforms: []string{"qemu", "qemu-unpriv"},
 		SkipFunc: func(version semver.Version, channel, arch, platform string) bool {
@@ -138,7 +138,7 @@ systemd:
 		Name:        "cl.sysext.boot.old",
 		Run:         sysextBootLogicOld,
 		ClusterSize: 0,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is uses its own OEM files and shouldn't run on other platforms
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3481},
@@ -148,16 +148,17 @@ systemd:
 		Name:        "cl.sysext.boot",
 		Run:         sysextBootLogicNew,
 		ClusterSize: 0,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is uses its own OEM files and shouldn't run on other platforms
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3603},
 	})
 	register.Register(&register.Test{
-		Name:        "cl.sysext.fallbackdownload",
-		Run:         sysextFallbackDownload,
-		ClusterSize: 0,
-		Distros:     []string{"cl"},
+		Name:           "cl.sysext.fallbackdownload",
+		Run:            sysextFallbackDownload,
+		ClusterSize:    0,
+		Distros:        []string{"cl"},
+		ExcludeDistros: []string{"acl"},
 		// This test is uses its own OEM files and shouldn't run on other platforms
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3620},
@@ -169,7 +170,7 @@ systemd:
 		NativeFuncs: map[string]func() error{
 			"Omaha": Serve,
 		},
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv"},
 		SkipFunc: func(version semver.Version, channel, arch, platform string) bool {
@@ -205,8 +206,12 @@ func checkNoAVCMessages(c cluster.TestCluster, m platform.Machine) {
 		c.Fatalf("failed to parse os-release version: %v", err)
 	}
 
-	if sv.LessThan(semver.Version{Major: kola.AVCChecksMajorVersion}) {
+	if kola.Options.Distribution != "acl" && sv.LessThan(semver.Version{Major: kola.AVCChecksMajorVersion}) {
 		// skip AVC checks altogether - too old Flatcar version
+		//
+		// ACL uses lower version numbering, but always ships with
+		// enforcing SELinux policy (no ACL tests exercise this path currently,
+		// as ACL uses a different update flow)
 		return
 	}
 

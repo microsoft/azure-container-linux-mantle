@@ -68,7 +68,7 @@ const (
       },
       {
         "mount": {
-          "device": "/dev/disk/by-id/virtio-primary-disk-part9",
+          "device": "/dev/disk/by-id/virtio-primary-disk-{{ .WastelandPart }}",
           "format": "ext4",
           "label": "wasteland",
           "wipeFilesystem": true
@@ -103,7 +103,7 @@ const (
   "storage": {
     "disks": [
       {
-        "device": "/dev/disk/by-partlabel/OEM-CONFIG"
+        "device": "/dev/disk/by-partlabel/{{ .DataPartLabel }}"
       },
       {
         "device": "/dev/disk/by-partlabel/USR-B"
@@ -122,8 +122,75 @@ const (
     "raid": [
       {
         "devices": [
-          "/dev/disk/by-partlabel/OEM-CONFIG",
+          "/dev/disk/by-partlabel/{{ .DataPartLabel }}",
           "/dev/disk/by-partlabel/USR-B"
+        ],
+        "level": "{{ .RaidLevel }}",
+        "name": "DATA"
+      }
+    ]
+  },
+  "systemd": {
+    "units": [
+      {
+        "name": "var-lib-data.mount",
+        "enabled": true,
+        "contents": "[Mount]\nWhat=/dev/md/DATA\nWhere=/var/lib/data\nType=ext4\n\n[Install]\nWantedBy=local-fs.target"
+      }
+    ]
+  }
+}
+`
+
+	// IgnitionConfigDataRaidSecondaryDisk uses two partitions on a secondary
+	// disk for the RAID array instead of repurposing existing primary-disk
+	// partitions that may not be expendable in the UKI layout.
+	IgnitionConfigDataRaidSecondaryDisk = `{
+  "ignition": {
+    "config": {},
+    "security": {
+      "tls": {}
+    },
+    "timeouts": {},
+    "version": "2.3.0"
+  },
+  "networkd": {},
+  "storage": {
+    "disks": [
+      {
+        "device": "/dev/disk/by-id/virtio-secondary",
+        "partitions": [
+          {
+            "label": "data1",
+            "number": 1,
+            "sizeMiB": 256,
+            "typeGuid": "0fc63daf-8483-4772-8e79-3d69d8477de4"
+          },
+          {
+            "label": "data2",
+            "number": 2,
+            "sizeMiB": 256,
+            "typeGuid": "0fc63daf-8483-4772-8e79-3d69d8477de4"
+          }
+        ],
+        "wipeTable": true
+      }
+    ],
+    "filesystems": [
+      {
+        "name": "DATA",
+        "mount": {
+          "device": "/dev/md/DATA",
+          "format": "ext4",
+          "label": "DATA"
+        }
+      }
+    ],
+    "raid": [
+      {
+        "devices": [
+          "/dev/disk/by-partlabel/data1",
+          "/dev/disk/by-partlabel/data2"
         ],
         "level": "{{ .RaidLevel }}",
         "name": "DATA"
@@ -151,64 +218,114 @@ var (
 )
 
 type raidConfig struct {
-	RaidLevel string
+	RaidLevel     string
+	WastelandPart string // "part9" for CL (legacy layout), "part5" for ACL (UKI layout)
+	DataPartLabel string // "OEM-CONFIG" for CL (legacy layout) — unused for ACL
+}
+
+// distroLayout holds the partition references that differ between
+// the legacy (CL) and UKI (ACL) disk layouts.
+type distroLayout struct {
+	prefix            string // test name prefix: "cl" or "acl"
+	distro            string // distro tag for registration
+	wastelandPart     string // partition number suffix for the ROOT partition device
+	dataPartLabel     string // partlabel for the expendable data partition (CL only)
+	dataUseSecondDisk bool   // if true, data RAID uses a secondary disk instead of primary-disk partitions
+}
+
+var distroLayouts = []distroLayout{
+	{"cl", "cl", "part9", "OEM-CONFIG", false}, // legacy disk layout
+	{"acl", "acl", "part5", "", true},           // UKI disk layout
 }
 
 func init() {
-	for raidLevel, _ := range raidTypes {
+	for raidLevel := range raidTypes {
 		level := raidLevel
 
-		// root partition
-		templRoot, err := util.ExecTemplate(IgnitionConfigRootRaid, raidConfig{
-			RaidLevel: level,
-		})
-		if err != nil {
-			fmt.Printf("fail to execute template for %s: %v\n", level, err)
-			return
+		for _, dl := range distroLayouts {
+			dl := dl // capture loop variable
+
+			// root partition
+			templRoot, err := util.ExecTemplate(IgnitionConfigRootRaid, raidConfig{
+				RaidLevel:     level,
+				WastelandPart: dl.wastelandPart,
+			})
+			if err != nil {
+				fmt.Printf("fail to execute template for %s/%s: %v\n", dl.prefix, level, err)
+				return
+			}
+			userDataRoot := conf.Ignition(templRoot)
+
+			runRootOnRaid := func(c cluster.TestCluster) {
+				RootOnRaid(c, userDataRoot)
+			}
+
+			register.Register(&register.Test{
+				// This test needs additional disks which is only supported on qemu since Ignition
+				// does not support deleting partitions without wiping the partition table and the
+				// disk doesn't have room for new partitions.
+				// TODO(ajeddeloh): change this to delete partition 9 and replace it with 9 and 10
+				// once Ignition supports it.
+				Run:         runRootOnRaid,
+				ClusterSize: 0,
+				// This test is normally not related to the cloud environment
+				Platforms: []string{"qemu"},
+				Name:      fmt.Sprintf("%s.disk.%s.root", dl.prefix, raidLevel),
+				Distros:   []string{dl.distro},
+			})
+
+			// data partition
+			if dl.dataUseSecondDisk {
+				// ACL (UKI layout): primary-disk partitions like OEM-CONFIG
+				// and USR-B are not expendable; use a secondary disk instead.
+				templData, err := util.ExecTemplate(IgnitionConfigDataRaidSecondaryDisk, raidConfig{
+					RaidLevel: level,
+				})
+				if err != nil {
+					fmt.Printf("fail to execute template for %s/%s: %v\n", dl.prefix, level, err)
+					return
+				}
+				userDataData := conf.Ignition(templData)
+
+				runDataOnRaid := func(c cluster.TestCluster) {
+					DataOnRaidSecondaryDisk(c, userDataData)
+				}
+
+				register.Register(&register.Test{
+					Run:         runDataOnRaid,
+					ClusterSize: 0,
+					Name:        fmt.Sprintf("%s.disk.%s.data", dl.prefix, raidLevel),
+					Distros:     []string{dl.distro},
+					// Additional disks are only supported on qemu, not qemu-unpriv.
+					Platforms: []string{"qemu"},
+				})
+			} else {
+				// CL (legacy layout): repurpose OEM-CONFIG + USR-B on the primary disk
+				templData, err := util.ExecTemplate(IgnitionConfigDataRaid, raidConfig{
+					RaidLevel:     level,
+					DataPartLabel: dl.dataPartLabel,
+				})
+				if err != nil {
+					fmt.Printf("fail to execute template for %s/%s: %v\n", dl.prefix, level, err)
+					return
+				}
+				userDataData := conf.Ignition(templData)
+
+				runDataOnRaid := func(c cluster.TestCluster) {
+					DataOnRaid(c, userDataData)
+				}
+
+				register.Register(&register.Test{
+					Run:         runDataOnRaid,
+					ClusterSize: 1,
+					Name:        fmt.Sprintf("%s.disk.%s.data", dl.prefix, raidLevel),
+					UserData:    userDataData,
+					Distros:     []string{dl.distro},
+					// This test is normally not related to the cloud environment
+					Platforms: []string{"qemu", "qemu-unpriv"},
+				})
+			}
 		}
-		userDataRoot := conf.Ignition(templRoot)
-
-		runRootOnRaid := func(c cluster.TestCluster) {
-			RootOnRaid(c, userDataRoot)
-		}
-
-		register.Register(&register.Test{
-			// This test needs additional disks which is only supported on qemu since Ignition
-			// does not support deleting partitions without wiping the partition table and the
-			// disk doesn't have room for new partitions.
-			// TODO(ajeddeloh): change this to delete partition 9 and replace it with 9 and 10
-			// once Ignition supports it.
-			Run:         runRootOnRaid,
-			ClusterSize: 0,
-			// This test is normally not related to the cloud environment
-			Platforms: []string{"qemu"},
-			Name:      fmt.Sprintf("cl.disk.%s.root", raidLevel),
-			Distros:   []string{"cl"},
-		})
-
-		// data partition
-		templData, err := util.ExecTemplate(IgnitionConfigDataRaid, raidConfig{
-			RaidLevel: level,
-		})
-		if err != nil {
-			fmt.Printf("fail to execute template for %s: %v\n", level, err)
-			return
-		}
-		userDataData := conf.Ignition(templData)
-
-		runDataOnRaid := func(c cluster.TestCluster) {
-			DataOnRaid(c, userDataData)
-		}
-
-		register.Register(&register.Test{
-			Run:         runDataOnRaid,
-			ClusterSize: 1,
-			Name:        fmt.Sprintf("cl.disk.%s.data", raidLevel),
-			UserData:    userDataData,
-			Distros:     []string{"cl"},
-			// This test is normally not related to the cloud environment
-			Platforms: []string{"qemu", "qemu-unpriv"},
-		})
 	}
 }
 
@@ -241,6 +358,28 @@ func DataOnRaid(c cluster.TestCluster, userData *conf.UserData) {
 
 	// reboot it to make sure it comes up again
 	err := m.Reboot()
+	if err != nil {
+		c.Fatalf("could not reboot machine: %v", err)
+	}
+
+	checkIfMountpointIsRaid(c, m, "/var/lib/data")
+}
+
+func DataOnRaidSecondaryDisk(c cluster.TestCluster, userData *conf.UserData) {
+	options := platform.MachineOptions{
+		AdditionalDisks: []platform.Disk{
+			{Size: "520M", DeviceOpts: []string{"serial=secondary"}},
+		},
+	}
+	m, err := tutil.NewMachineWithOptions(c, userData, options)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	checkIfMountpointIsRaid(c, m, "/var/lib/data")
+
+	// reboot it to make sure it comes up again
+	err = m.Reboot()
 	if err != nil {
 		c.Fatalf("could not reboot machine: %v", err)
 	}

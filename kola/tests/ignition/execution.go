@@ -43,7 +43,7 @@ func init() {
                                ]
                              }
                            }`),
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 		// We can run the coreos.ignition.once test on all cloud environments instead
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -80,7 +80,7 @@ func init() {
                                ]
                              }
                            }`),
-		Distros: []string{"cl", "fcos", "rhcos"},
+		Distros: []string{"acl", "cl", "fcos", "rhcos"},
 	})
 	register.Register(&register.Test{
 		Name:        "cl.ignition.translation",

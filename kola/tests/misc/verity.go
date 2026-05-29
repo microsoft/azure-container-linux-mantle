@@ -27,12 +27,16 @@ import (
 	"github.com/flatcar/mantle/platform"
 )
 
+const (
+	defaultUsrSize = "1065345024"
+)
+
 func init() {
 	register.Register(&register.Test{
 		Run:         Verity,
 		ClusterSize: 1,
 		Name:        "cl.verity",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// Somehow hangs
 		ExcludePlatforms: []string{"qemu-unpriv"},
 		Flags:            []register.Flag{register.NoKernelPanicCheck, register.NoVerityCorruptionCheck},
@@ -52,22 +56,38 @@ func Verity(c cluster.TestCluster) {
 // TODO(mischief): seems like a good candidate for kolet.
 
 // VerityVerify asserts that the filesystem mounted on /usr matches the
-// dm-verity hash that is embedded in the CoreOS kernel.
+// dm-verity root hash.
+// On CL (Flatcar), a patched GRUB reads the hash from a fixed offset in the
+// kernel binary. On ACL, the hash is passed via the kernel command line
+// (usrhash= in grub.cfg or baked into the UKI), so we read it from /proc/cmdline.
 func VerityVerify(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
-	// get offset of verity hash within kernel
-	rootOffset := getKernelVerityHashOffset(c)
-
-	// extract verity hash from kernel
-	ddcmd := fmt.Sprintf("sudo dd if=/boot/flatcar/vmlinuz-a skip=%d count=64 bs=1 status=none", rootOffset)
-	hash := c.MustSSH(m, ddcmd)
+	var hash []byte
+	if kola.Options.Distribution == "acl" {
+		// ACL passes the verity hash on the kernel command line
+		hash = c.MustSSH(m, "sed -n 's/.*usrhash=\\([a-f0-9]*\\).*/\\1/p' /proc/cmdline")
+		if len(hash) == 0 {
+			c.Fatalf("usrhash= not found in /proc/cmdline")
+		}
+	} else {
+		// CL embeds the hash in the kernel binary at a known offset
+		rootOffset := getKernelVerityHashOffset(c)
+		ddcmd := fmt.Sprintf("sudo dd if=/boot/flatcar/vmlinuz-a skip=%d count=64 bs=1 status=none", rootOffset)
+		hash = c.MustSSH(m, ddcmd)
+	}
 
 	// find /usr dev
 	usrdev := util.GetUsrDeviceNode(c, m)
 
 	// figure out partition size for hash dev offset, fallback to the expected value in case e2size doesn't work
-	offset := c.MustSSH(m, "sudo e2size "+usrdev+" || echo 1065345024")
+	var offset []byte
+	if kola.Options.Distribution != "acl" {
+		offset = c.MustSSH(m, "sudo e2size "+usrdev+" || echo "+defaultUsrSize)
+	} else {
+		// ACL doesn't include Seismograph, with e2size
+		offset = c.MustSSH(m, "sudo btrfs inspect-internal dump-super "+usrdev+" | awk '/total_bytes/{print $2; exit}' || echo "+defaultUsrSize)
+	}
 
 	c.MustSSH(m, fmt.Sprintf("sudo veritysetup verify --verbose --hash-offset=%s %s %s %s", offset, usrdev, usrdev, hash))
 }

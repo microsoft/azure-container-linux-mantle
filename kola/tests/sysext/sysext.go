@@ -35,6 +35,7 @@ set -euo pipefail
 version=$(source /etc/os-release; echo "${VERSION}")
 version_id=$(source /etc/os-release; echo "${VERSION_ID}")
 board=$(source /usr/share/flatcar/release; echo "${FLATCAR_RELEASE_BOARD}")
+distro_id=$(source /etc/os-release; echo "${ID}")
 
 mkdir -p /work/sysext_rootfs/usr/share/flatcar-sysext-kola-test
 echo "${version_id}" >/work/sysext_rootfs/usr/share/flatcar-sysext-kola-test/file
@@ -42,8 +43,8 @@ mkdir -p /work/sysext_rootfs/usr/lib/extension-release.d
 sysext_arch=x86-64
 if [[ "${board}" = 'arm64-usr' ]]; then sysext_arch=arm64; fi
 metadata=(
-    'ID=flatcar'
-    "VERSION_ID=${version_id}"
+    "ID=${distro_id}"
+    "SYSEXT_LEVEL=1.0"
     "ARCHITECTURE=${sysext_arch}"
 )
 metadata_file=/work/sysext_rootfs/usr/lib/extension-release.d/extension-release.oem-test
@@ -202,7 +203,7 @@ func init() {
 		Name:        "sysext.simple.old",
 		Run:         checkSysextSimpleOld,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3185},
@@ -212,7 +213,7 @@ func init() {
     - path: /etc/extensions/test/usr/lib/extension-release.d/extension-release.test
       contents:
         inline: |
-          ID=flatcar
+          ID=_any
           SYSEXT_LEVEL=1.0
     - path: /etc/extensions/test/usr/hello-sysext
       contents:
@@ -223,7 +224,7 @@ func init() {
 		Name:        "sysext.simple",
 		Run:         checkSysextSimpleNew,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
 		MinVersion: semver.Version{Major: 3603},
@@ -232,7 +233,7 @@ func init() {
     - path: /etc/extensions/test/usr/lib/extension-release.d/extension-release.test
       contents:
         inline: |
-          ID=flatcar
+          ID=_any
           SYSEXT_LEVEL=1.0
     - path: /etc/extensions/test/usr/hello-sysext
       contents:
@@ -243,12 +244,13 @@ func init() {
 		Name:        "sysext.custom-docker.torcx",
 		Run:         checkSysextCustomDocker,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3185},
 		// Torcx was retired after release 3760.
 		EndVersion: semver.Version{Major: 3760},
+		Flags:      []register.Flag{register.NeedsDocker},
 		UserData: conf.ContainerLinuxConfig(`storage:
   files:
     - path: /etc/systemd/system-generators/torcx-generator
@@ -260,13 +262,14 @@ func init() {
 		Name:        "sysext.custom-docker.sysext",
 		Run:         checkSysextCustomDocker,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 		// Sysext docker was introduced after release 3760.
 		// NOTE that 3761 is a developer version which was never released.
 		// However, the next largest Alpha major release shipped sysext.
 		MinVersion: semver.Version{Major: 3761},
+		// Both CL-style (-flatcar.raw) and ACL-style (.raw) names are masked.
 		UserData: conf.Butane(`
 variant: flatcar
 version: 1.0.0
@@ -280,13 +283,21 @@ storage:
     target: /dev/null
     hard: false
     overwrite: true
+  - path: /etc/extensions/docker.raw
+    target: /dev/null
+    hard: false
+    overwrite: true
+  - path: /etc/extensions/containerd.raw
+    target: /dev/null
+    hard: false
+    overwrite: true
 `),
 	})
 	register.Register(&register.Test{
 		Name:        "sysext.custom-oem",
 		Run:         checkSysextCustomOEM,
 		ClusterSize: 0,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is uses its own OEM files and shouldn't run on other platforms
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3603},
@@ -332,6 +343,13 @@ func checkSysextCustomDocker(c cluster.TestCluster) {
 		arch = "x86_64"
 	}
 
+	// Set OS ID for sysext extension-release metadata to match the running distro.
+	// The sysext-bakery defaults to OS=flatcar; ACL needs OS=azurelinux.
+	osID := "flatcar"
+	if kola.Options.Distribution == "acl" {
+		osID = "azurelinux"
+	}
+
 	cmdNotWorking := `if docker run --rm ghcr.io/flatcar/busybox true; then exit 1; fi`
 	cmdWorking := `docker run --rm ghcr.io/flatcar/busybox echo Hello World`
 	// First assert that Docker doesn't work because Torcx is disabled
@@ -340,13 +358,14 @@ func checkSysextCustomDocker(c cluster.TestCluster) {
 	_ = c.MustSSH(c.Machines()[0], `git clone https://github.com/flatcar/sysext-bakery.git && git -C sysext-bakery checkout 9850ffd5b2353f45a9b3bf4fb84f8138a149e3e7`)
 	// Flatcar has no mksquashfs and btrfs is missing a bugfix but at least ext4 works
 	// The first test is for a fixed Docker version, which with the time will get old and older but is still expected to work because users may also "freeze" their Docker version this way
-	_ = c.MustSSH(c.Machines()[0], fmt.Sprintf(`ARCH=%[1]s ONLY_DOCKER=1 FORMAT=ext4 sysext-bakery/create_docker_sysext.sh 20.10.21 docker && ARCH=%[1]s ONLY_CONTAINERD=1 FORMAT=ext4 sysext-bakery/create_docker_sysext.sh 20.10.21 containerd && sudo mv docker.raw containerd.raw /etc/extensions/`, arch))
+	_ = c.MustSSH(c.Machines()[0], fmt.Sprintf(`ARCH=%[1]s ONLY_DOCKER=1 FORMAT=ext4 OS=%[2]s sysext-bakery/create_docker_sysext.sh 20.10.21 docker && ARCH=%[1]s ONLY_CONTAINERD=1 FORMAT=ext4 OS=%[2]s sysext-bakery/create_docker_sysext.sh 20.10.21 containerd && sudo mv docker.raw containerd.raw /etc/extensions/`, arch, osID))
 	_ = c.MustSSH(c.Machines()[0], `sudo systemctl restart systemd-sysext`)
 	// We should now be able to use Docker
 	_ = c.MustSSH(c.Machines()[0], cmdWorking)
 	// The next test is with a recent Docker version, here the one from the Flatcar image to couple it to something that doesn't change under our feet
-	version := string(c.MustSSH(c.Machines()[0], `bzcat /usr/share/licenses/licenses.json.bz2 | grep -m 1 -o 'app-\(containers\|emulation\)/docker-[0-9][^:]*' | cut -d - -f 3`))
-	_ = c.MustSSH(c.Machines()[0], fmt.Sprintf(`ONLY_DOCKER=1 FORMAT=ext4 ARCH=%[2]s sysext-bakery/create_docker_sysext.sh %[1]s docker && ONLY_CONTAINERD=1 FORMAT=ext4 ARCH=%[2]s sysext-bakery/create_docker_sysext.sh %[1]s containerd && sudo mv docker.raw containerd.raw /etc/extensions/`, version, arch))
+	// Use "docker --version" instead of bzcat (bzcat is not available on ACL)
+	version := string(c.MustSSH(c.Machines()[0], `docker --version | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*'`))
+	_ = c.MustSSH(c.Machines()[0], fmt.Sprintf(`ONLY_DOCKER=1 FORMAT=ext4 ARCH=%[2]s OS=%[3]s sysext-bakery/create_docker_sysext.sh %[1]s docker && ONLY_CONTAINERD=1 FORMAT=ext4 ARCH=%[2]s OS=%[3]s sysext-bakery/create_docker_sysext.sh %[1]s containerd && sudo mv docker.raw containerd.raw /etc/extensions/`, version, arch, osID))
 	_ = c.MustSSH(c.Machines()[0], `sudo systemctl restart systemd-sysext && sudo systemctl restart docker containerd`)
 	// We should now still be able to use Docker
 	_ = c.MustSSH(c.Machines()[0], cmdWorking)

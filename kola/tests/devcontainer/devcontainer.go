@@ -180,7 +180,7 @@ func init() {
 		ClusterSize: 0,
 		// This test is normally not related to the cloud environment
 		Platforms:  []string{"qemu", "qemu-unpriv"},
-		Distros:    []string{"cl"},
+		Distros:    []string{"acl", "cl"},
 		MinVersion: semver.Version{Major: 2592},
 		NativeFuncs: map[string]func() error{
 			"Http": util.Serve,
@@ -192,9 +192,9 @@ func init() {
 		ClusterSize: 0,
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv"},
-		Distros:   []string{"cl"},
+		Distros:   []string{"acl", "cl"},
 		// TODO: Revisit this flag when updating SELinux policies.
-		Flags: []register.Flag{register.NoEnableSelinux},
+		Flags: []register.Flag{register.NoEnableSelinux, register.NeedsDocker},
 		NativeFuncs: map[string]func() error{
 			"Http": util.Serve,
 		},

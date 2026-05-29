@@ -79,7 +79,7 @@ func init() {
 		Run:         btrfsRoot,
 		ClusterSize: 1,
 		UserData:    btrfsConfigV1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// Running only cl.ignition.v2.btrfsroot on all clouds should be enough
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -88,7 +88,7 @@ func init() {
 		Run:         btrfsRoot,
 		ClusterSize: 1,
 		UserData:    btrfsConfigV2,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 	})
 
 	// Reformat the root as xfs
@@ -137,7 +137,7 @@ func init() {
 		Run:         xfsRoot,
 		ClusterSize: 1,
 		UserData:    xfsConfigV1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// Running only cl.ignition.v2.btrfsroot on all clouds should be enough
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -146,7 +146,7 @@ func init() {
 		Run:         xfsRoot,
 		ClusterSize: 1,
 		UserData:    xfsConfigV2,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// Running only cl.ignition.v2.btrfsroot on all clouds should be enough
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -197,7 +197,7 @@ func init() {
 		Run:         ext4Root,
 		ClusterSize: 1,
 		UserData:    ext4ConfigV1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// Running only cl.ignition.v2.btrfsroot on all clouds should be enough
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -206,7 +206,7 @@ func init() {
 		Run:         ext4Root,
 		ClusterSize: 1,
 		UserData:    ext4ConfigV2,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// Running only cl.ignition.v2.btrfsroot on all clouds should be enough
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -214,7 +214,7 @@ func init() {
 		Name:        "cl.ignition.v2_1.ext4checkexisting",
 		Run:         ext4CheckExisting,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// Running only cl.ignition.v2.btrfsroot on all clouds should be enough
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -242,7 +242,7 @@ func init() {
 		Run:         vfatUsrB,
 		ClusterSize: 1,
 		UserData:    vfatConfigV2_1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -270,7 +270,7 @@ func init() {
 		Run:         swapUsrB,
 		ClusterSize: 1,
 		UserData:    swapConfigV2_1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -318,7 +318,7 @@ systemd:
 		Run:         testSwapActivation,
 		ClusterSize: 1,
 		UserData:    swapActivation,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
 		MinVersion: semver.Version{Major: 3033},
@@ -331,7 +331,7 @@ systemd:
 		Name:        "cl.ignition.partition_on_boot_disk",
 		Run:         testPartitionOnBootDisk,
 		ClusterSize: 0,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		Platforms:   []string{"qemu", "qemu-unpriv"},
 	})
 }

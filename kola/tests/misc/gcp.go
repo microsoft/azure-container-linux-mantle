@@ -13,7 +13,7 @@ func init() {
 		Name:        "cl.misc.gce.oem",
 		ClusterSize: 1,
 		Platforms:   []string{"gce"},
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		MinVersion:  semver.Version{Major: 2801},
 		Run:         gceVerifyOEMService,
 	})

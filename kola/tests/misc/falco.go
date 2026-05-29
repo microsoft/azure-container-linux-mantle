@@ -12,13 +12,13 @@ func init() {
 		Run:         loadFalco,
 		ClusterSize: 1,
 		Name:        "cl.misc.falco",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu"},
 		// falco builder container can't handle our arm64 config (yet)
 		Architectures: []string{"amd64"},
 		// selinux blocks insmod from within container
-		Flags:      []register.Flag{register.NoEnableSelinux},
+		Flags:      []register.Flag{register.NoEnableSelinux, register.NeedsDocker},
 		SkipFunc:   kola.SkipSecureboot,
 		EndVersion: semver.Version{Major: 4330, Minor: 0, Patch: 0},
 	})

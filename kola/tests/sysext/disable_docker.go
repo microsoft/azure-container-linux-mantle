@@ -20,6 +20,10 @@ func init() {
 		// NOTE that 3761 is a developer version which was never released.
 		// However, the next largest Alpha major release shipped sysext.
 		MinVersion: semver.Version{Major: 3761},
+		// On ACL, the docker sysext is not linked in /etc/extensions for,
+		// since this test doesn't use NeedsDocker flag, regardless this tests
+		// that docker is not present when the sysext is not merged.
+		// Both CL-style (-flatcar.raw) and ACL-style (.raw) names are masked.
 		UserData: conf.Butane(`
 variant: flatcar
 version: 1.0.0
@@ -29,8 +33,12 @@ storage:
     target: /dev/null
     hard: false
     overwrite: true
+  - path: /etc/extensions/docker.raw
+    target: /dev/null
+    hard: false
+    overwrite: true
 `),
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 	})
 }
 

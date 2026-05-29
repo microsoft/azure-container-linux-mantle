@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
 	"github.com/flatcar/mantle/platform/conf"
@@ -60,7 +61,7 @@ func init() {
 		Run:         journalRemote,
 		ClusterSize: 0,
 		Name:        "systemd.journal.remote",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 
 		// Disabled on Azure because setting hostname
 		// is required at the instance creation level
@@ -71,7 +72,7 @@ func init() {
 	register.Register(&register.Test{
 		Run:     journalUser,
 		Name:    "systemd.journal.user",
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 
 		// This test is normally not related to the cloud environment
 		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
@@ -141,6 +142,11 @@ func journalRemote(c cluster.TestCluster) {
 	gateway, err := c.NewMachine(gatewayconf)
 	if err != nil {
 		c.Fatalf("Cluster.NewMachine: %s", err)
+	}
+
+	if kola.Options.Distribution == "acl" {
+		// Open firewall port for gatewayd (ACL has INPUT DROP policy)
+		c.MustSSH(gateway, "sudo iptables -C INPUT -p tcp --dport 19531 -j ACCEPT 2>/dev/null || sudo iptables -A INPUT -p tcp --dport 19531 -j ACCEPT")
 	}
 
 	// log a unique message on gatewayd machine

@@ -79,7 +79,7 @@ func NewFlight(opts *Options) (platform.Flight, error) {
 		diskImagePath: opts.DiskImage,
 	}
 
-	if opts.Distribution != "cl" {
+	if opts.Distribution != "cl" && opts.Distribution != "acl" {
 		// don't apply CL-specific mangling
 		opts.UseVanillaImage = true
 	}

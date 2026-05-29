@@ -221,12 +221,19 @@ func (a *API) CreateInstance(name, sshkey, resourceGroup string, userdata *conf.
 	vmResourceGroup := a.getVMRG(resourceGroup)
 	subnet := network.subnet
 
-	ip, err := a.createPublicIP(resourceGroup)
-	if err != nil {
-		return nil, fmt.Errorf("creating public ip: %v", err)
-	}
-	if ip.Name == nil {
-		return nil, fmt.Errorf("couldn't get public IP name")
+	// Only allocate a Public IP when callers need it. With UsePrivateIPs the
+	// VM is reachable over the peered VNet, and attaching a Public IP to the
+	// NIC otherwise exposes sshd to the Internet (no NSG is created here).
+	var ip *armnetwork.PublicIPAddress
+	if !a.Opts.UsePrivateIPs {
+		var err error
+		ip, err = a.createPublicIP(resourceGroup)
+		if err != nil {
+			return nil, fmt.Errorf("creating public ip: %v", err)
+		}
+		if ip.Name == nil {
+			return nil, fmt.Errorf("couldn't get public IP name")
+		}
 	}
 
 	nic, err := a.createNIC(ip, &subnet, resourceGroup)
@@ -245,7 +252,9 @@ func (a *API) CreateInstance(name, sshkey, resourceGroup string, userdata *conf.
 			ForceDeletion: to.Ptr(true),
 		})
 		_, _ = a.intClient.BeginDelete(context.TODO(), resourceGroup, *nic.Name, nil)
-		_, _ = a.ipClient.BeginDelete(context.TODO(), resourceGroup, *ip.Name, nil)
+		if ip != nil {
+			_, _ = a.ipClient.BeginDelete(context.TODO(), resourceGroup, *ip.Name, nil)
+		}
 	}
 
 	poller, err := a.compClient.BeginCreateOrUpdate(context.TODO(), vmResourceGroup, name, vmParams, nil)
@@ -285,10 +294,9 @@ func (a *API) CreateInstance(name, sshkey, resourceGroup string, userdata *conf.
 	if vm.Name == nil {
 		return nil, fmt.Errorf("couldn't get VM ID")
 	}
-	ipName := *ip.Name
-	if a.Opts.UsePrivateIPs {
-		// empty IP name means instance is accessible via private IP address
-		ipName = ""
+	var ipName string
+	if ip != nil && !a.Opts.UsePrivateIPs {
+		ipName = *ip.Name
 	}
 	publicaddr, privaddr, err := a.GetIPAddresses(*nic.Name, ipName, resourceGroup)
 	if err != nil {

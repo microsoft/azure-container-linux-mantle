@@ -307,7 +307,7 @@ func CreateOvmfVarsCopy(dir, ovmfVars string) (string, error) {
 	return path.Base(ovmfVars), nil
 }
 
-func CreateQEMUCommand(board, uuid, firmware, ovmfVars, consolePath, confPath, diskImagePath string, enableSecureboot, isIgnition bool, options MachineOptions) ([]string, []*os.File, error) {
+func CreateQEMUCommand(board, uuid, firmware, ovmfVars, consolePath, confPath, diskImagePath, armConfPath string, enableSecureboot, isIgnition bool, options MachineOptions) ([]string, []*os.File, error) {
 	var qmCmd []string
 
 	// As we expand this list of supported native + board
@@ -425,6 +425,12 @@ func CreateQEMUCommand(board, uuid, firmware, ovmfVars, consolePath, confPath, d
 		qmCmd = append(qmCmd,
 			"-fsdev", "local,id=cfg,security_model=none,readonly=on,path="+confPath,
 			"-device", Virtio(board, "9p", "fsdev=cfg,mount_tag=config-2"))
+	}
+
+	// Arm64: If armConfPath is set and isIgnition is false, then it is coming on as only ignition config
+	if armConfPath != "" && !isIgnition && board == "arm64-usr" {
+		qmCmd = append(qmCmd,
+			"-fw_cfg", "name=opt/org.flatcar-linux/config,file="+armConfPath)
 	}
 
 	if options.VNC != "" {

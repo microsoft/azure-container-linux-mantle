@@ -8,6 +8,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 
+	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
 	"github.com/flatcar/mantle/platform/conf"
@@ -41,7 +42,7 @@ func init() {
 		Run:         OverlayCleanup,
 		ClusterSize: 1,
 		Name:        "cl.overlay.cleanup",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		MinVersion:  semver.Version{Major: 3530},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
@@ -51,8 +52,10 @@ func init() {
 		ClusterSize: 1,
 		Name:        "cl.osreset.ignition-rerun",
 		UserData:    ignitionRerun,
-		Distros:     []string{"cl"},
-		MinVersion:  semver.Version{Major: 3530},
+		// ACL uses UKI (systemd-boot) mode where dynamic kernel argument
+		// injection via addons is under todo list for now.
+		Distros:    []string{"cl"},
+		MinVersion: semver.Version{Major: 3530},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 	})
@@ -82,21 +85,42 @@ func OverlayCleanup(c cluster.TestCluster) {
 	// recreate the folder (and add a new file in it) which means that the lowerdir folder isn't used
 	// and deleting equal contents would not result in it being available.
 	// All these files should not be part of the tmpfiles rules for the test to work.
-	_ = c.MustSSH(m, `sudo rm -r /etc/sssd && sudo mkdir /etc/sssd && sudo chmod 700 /etc/sssd && sudo rm /etc/kexec.conf && sudo rm -rf /etc/samba && sudo rm -r /etc/bash && sudo cp -a /usr/share/flatcar/etc/bash /etc/bash && sudo touch /etc/bash/hello`)
 
+	// FIX for ACL
+	// a. recreating a directory but empty
+	// - do not have sssd package installed. Using /etc/conntrackd
+	// b. deleting a file
+	// - using /etc/my.cnf
+	// c. deleting a directory
+	// - using /etc/my.cnf.d
+	// d. recreating a directory with same contents plus a new file
+	// - using /etc/skel and adding /etc/skel/hello (and keeping /etc/skel/.bashrc from the original contents)
+	if kola.Options.Distribution == "acl" {
+		_ = c.MustSSH(m, `sudo rm -r /etc/conntrackd && sudo mkdir /etc/conntrackd && sudo chmod 755 /etc/conntrackd && sudo rm /etc/my.cnf && sudo rm -rf /etc/my.cnf.d && sudo rm -r /etc/skel && sudo cp -a /usr/share/distro/etc/skel /etc/skel && sudo touch /etc/skel/hello`)
+	} else {
+		_ = c.MustSSH(m, `sudo rm -r /etc/sssd && sudo mkdir /etc/sssd && sudo chmod 700 /etc/sssd && sudo rm /etc/kexec.conf && sudo rm -rf /etc/samba && sudo rm -r /etc/bash && sudo cp -a /usr/share/flatcar/etc/bash /etc/bash && sudo touch /etc/bash/hello`)
+	}
 	// Test that /etc/resolv.conf will be recreated when removed
 	_ = c.MustSSH(m, `sudo rm /etc/resolv.conf`)
 
 	// The migration path for old machines with a full /etc and the cleanup of unwanted duplicates/
 	// upcopies can be tested the same way by copying duplicates to /etc and then rebooting to
 	// check that they get cleaned up.
-	_ = c.MustSSH(m, `sudo unshare -m bash -c 'umount /etc && cp -a /usr/share/flatcar/etc/{hosts,shells,os-release} /etc/ && mkdir /etc/security /etc/profile.d'`)
+	if kola.Options.Distribution == "acl" {
+		_ = c.MustSSH(m, `sudo unshare -m bash -c 'umount /etc && cp -a /usr/share/distro/etc/{hosts,shells,os-release} /etc/ && mkdir /etc/security /etc/profile.d'`)
+	} else {
+		_ = c.MustSSH(m, `sudo unshare -m bash -c 'umount /etc && cp -a /usr/share/flatcar/etc/{hosts,shells,os-release} /etc/ && mkdir /etc/security /etc/profile.d'`)
+	}
 	if err := m.Reboot(); err != nil {
 		c.Fatalf("could not reboot: %v", err)
 	}
 
 	_ = c.MustSSH(m, fmt.Sprintf(overlayCheck, "after reboot"))
-	_ = c.MustSSH(m, `if sudo test -e /etc/sssd/sssd.conf || test -e /etc/kexec.conf || test -e /etc/samba || test ! -e /etc/bash/hello || test ! -e /etc/bash/bashrc ; then echo "Deletion or modification lost: $_" ; exit 1; fi`)
+	if kola.Options.Distribution == "acl" {
+		_ = c.MustSSH(m, `if sudo test -e /etc/conntrackd/conntrackd.conf || test -e /etc/my.cnf || test -e /etc/my.cnf.d || test ! -e /etc/skel/hello || test ! -e /etc/skel/.bashrc ; then echo "Deletion or modification lost: $_" ; exit 1; fi`)
+	} else {
+		_ = c.MustSSH(m, `if sudo test -e /etc/sssd/sssd.conf || test -e /etc/kexec.conf || test -e /etc/samba || test ! -e /etc/bash/hello || test ! -e /etc/bash/bashrc ; then echo "Deletion or modification lost: $_" ; exit 1; fi`)
+	}
 	_ = c.MustSSH(m, `if test ! -e /etc/resolv.conf ; then echo "Files with tmpfile rule not recreated: $_" ; exit 1; fi && if ! sudo unshare -m bash -c 'umount /etc && test ! -e /etc/resolv.conf'; then echo "File with tmpfile rule exists as upcopy: $_"; exit 1; fi`)
 }
 

@@ -42,6 +42,13 @@ type jsonTest struct {
 
 func NewJSONReporter(filename, platform, version string) *jsonReporter {
 	return &jsonReporter{
+		// Initialize Tests to an empty slice rather than leaving it nil.
+		// Go's json.Marshal serializes nil slices as "null", but an
+		// initialized empty slice serializes as "[]". Downstream
+		// consumers that parse report.json (e.g. jq-based converters)
+		// may crash when iterating over null. This ensures report.json
+		// always has a valid array even when kola runs zero tests.
+		Tests:    []jsonTest{},
 		Platform: platform,
 		Version:  version,
 		filename: filename,

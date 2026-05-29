@@ -61,6 +61,8 @@ type Options struct {
 	ResourceGroup string
 	// ResourceGroupBasename is the prefix used for creating new resource groups
 	ResourceGroupBasename string
+	// ResourceGroupTags are extra key=value tags to apply to created resource groups
+	ResourceGroupTags map[string]string
 	// AvailabilitySet is an existing availability set to deploy the instance in.
 	AvailabilitySet string
 	// VMIdentity is the name of a managed identity to assign to the VM.

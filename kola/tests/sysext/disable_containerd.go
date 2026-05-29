@@ -21,6 +21,8 @@ func init() {
 		// However, the next largest Alpha major release shipped sysext.
 		MinVersion: semver.Version{Major: 3761},
 		// We also disable our vendor docker sysext since it depends on the containerd sysext.
+		// Both CL-style (-flatcar.raw) and ACL-style (.raw) names are masked so
+		// this test works on both distributions.
 		UserData: conf.Butane(`
 variant: flatcar
 version: 1.0.0
@@ -34,8 +36,16 @@ storage:
     target: /dev/null
     hard: false
     overwrite: true
+  - path: /etc/extensions/containerd.raw
+    target: /dev/null
+    hard: false
+    overwrite: true
+  - path: /etc/extensions/docker.raw
+    target: /dev/null
+    hard: false
+    overwrite: true
 `),
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 	})
 }
 

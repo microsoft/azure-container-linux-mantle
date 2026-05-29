@@ -53,7 +53,7 @@ func init() {
 		               ]
 		             }
 		           }`),
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
 	})
 	register.Register(&register.Test{
 		Name:        "coreos.ignition.groups",
@@ -105,7 +105,7 @@ func init() {
 		               ]
 		             }
 		           }`),
-		Distros: []string{"cl", "fcos", "rhcos"},
+		Distros: []string{"acl", "cl", "fcos", "rhcos"},
 	})
 	register.Register(&register.Test{
 		Name:        "cl.ignition.v1.users",
@@ -144,6 +144,42 @@ func init() {
 		Distros: []string{"cl"},
 	})
 	register.Register(&register.Test{
+		Name:        "acl.ignition.v1.users",
+		Run:         usersAcl,
+		ClusterSize: 1,
+		// This test is normally not related to the cloud environment
+		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		UserData: conf.Ignition(`{
+		             "ignitionVersion": 1,
+		             "systemd": {
+		               "units": [{
+		                 "name": "system-cloudinit@usr-share-flatcar-developer_data.service",
+		                 "mask": true
+		               }]
+		             },
+		             "passwd": {
+		               "users": [
+		                 {
+		                   "name": "core",
+		                   "passwordHash": "foobar"
+		                 },
+		                 {
+		                   "name": "user1",
+		                   "create": {}
+		                 },
+		                 {
+		                   "name": "user2",
+		                   "create": {
+		                     "uid": 1010,
+		                     "groups": [ "docker" ]
+		                   }
+		                 }
+		               ]
+		             }
+		           }`),
+		Distros: []string{"acl"},
+	})
+	register.Register(&register.Test{
 		Name:        "cl.ignition.v2.users",
 		Run:         users,
 		ClusterSize: 1,
@@ -178,6 +214,42 @@ func init() {
 		             }
 		           }`),
 		Distros: []string{"cl"},
+	})
+	register.Register(&register.Test{
+		Name:        "acl.ignition.v2.users",
+		Run:         usersAcl,
+		ClusterSize: 1,
+		// This test is normally not related to the cloud environment
+		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		UserData: conf.Ignition(`{
+		             "ignition": { "version": "2.0.0" },
+		             "systemd": {
+		               "units": [{
+		                 "name": "system-cloudinit@usr-share-flatcar-developer_data.service",
+		                 "mask": true
+		               }]
+		             },
+		             "passwd": {
+		               "users": [
+		                 {
+		                   "name": "core",
+		                   "passwordHash": "foobar"
+		                 },
+		                 {
+		                   "name": "user1",
+		                   "create": {}
+		                 },
+		                 {
+		                   "name": "user2",
+		                   "create": {
+		                     "uid": 1010,
+		                     "groups": [ "docker" ]
+		                   }
+		                 }
+		               ]
+		             }
+		           }`),
+		Distros: []string{"acl"},
 	})
 	register.Register(&register.Test{
 		Name:        "coreos.ignition.v2.users",
@@ -270,6 +342,29 @@ func users(c cluster.TestCluster) {
 		{
 			user:           "core",
 			passwdRecord:   "core:x:500:500:Flatcar Admin:/home/core:/bin/bash",
+			shadowPassword: "foobar",
+		},
+		{
+			user:           "user1",
+			passwdRecord:   "user1:x:1000:1000::/home/user1:/bin/bash",
+			shadowPassword: "*",
+		},
+		{
+			user:           "user2",
+			passwdRecord:   "user2:x:1010:1010::/home/user2:/bin/bash",
+			shadowPassword: "*",
+		},
+	}
+	testUser(c, m, tests)
+}
+
+func usersAcl(c cluster.TestCluster) {
+	m := c.Machines()[0]
+
+	tests := []userTest{
+		{
+			user:           "core",
+			passwdRecord:   "core:x:500:500:Inert Identity:/home/core:/bin/bash",
 			shadowPassword: "foobar",
 		},
 		{

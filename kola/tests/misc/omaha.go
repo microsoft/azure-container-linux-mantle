@@ -37,6 +37,7 @@ func init() {
 		Platforms:        []string{"qemu"},
 		ExcludePlatforms: []string{"qemu-unpriv"},
 		Distros:          []string{"cl"},
+		ExcludeDistros:   []string{"acl"},
 	})
 }
 

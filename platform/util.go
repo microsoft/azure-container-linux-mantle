@@ -97,6 +97,16 @@ func EnableSelinux(m Machine) error {
 	return nil
 }
 
+// Disable SELinux on a machine by setting it to permissive mode
+func DisableSelinux(m Machine) error {
+	_, stderr, err := m.SSH("sudo setenforce 0")
+	if err != nil {
+		return fmt.Errorf("unable to disable SELinux: %s: %s", err, stderr)
+	}
+
+	return nil
+}
+
 // Reboots a machine, stopping ssh first.
 // Afterwards run CheckMachine to verify the system is back and operational.
 func StartReboot(m Machine) error {
@@ -132,6 +142,11 @@ func StartMachine(m Machine, j *Journal) error {
 	if !m.RuntimeConf().NoEnableSelinux {
 		if err := EnableSelinux(m); err != nil {
 			return fmt.Errorf("machine %q failed to enable selinux: %v", m.ID(), err)
+		}
+	} else {
+		// Disable SELinux manually for distros where it is enforcing by default (ACL)
+		if err := DisableSelinux(m); err != nil {
+			return fmt.Errorf("machine %q failed to disable selinux: %v", m.ID(), err)
 		}
 	}
 	return nil

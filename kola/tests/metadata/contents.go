@@ -46,7 +46,7 @@ func init() {
 		ClusterSize: 1,
 		Platforms:   []string{"aws"},
 		UserData:    enableMetadataService,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 	})
 
 	register.Register(&register.Test{
@@ -55,7 +55,7 @@ func init() {
 		ClusterSize: 1,
 		Platforms:   []string{"azure"},
 		UserData:    enableMetadataService,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 	})
 }
 

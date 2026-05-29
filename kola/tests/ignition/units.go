@@ -42,7 +42,7 @@ func init() {
 		}]
     }
 }`),
-		Distros:    []string{"cl"},
+		Distros:    []string{"acl", "cl"},
 		MinVersion: semver.Version{Major: 3185},
 	})
 }

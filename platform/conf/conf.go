@@ -97,6 +97,7 @@ type Conf struct {
 	ignitionV33   *v33types.Config
 	cloudconfig   *cci.CloudConfig
 	script        string
+	isScript      bool
 	multipartMime *MultipartUserdata
 	user          string
 }
@@ -230,6 +231,11 @@ func (u *UserData) IsIgnitionCompatible() bool {
 	return u.kind == kindIgnition || u.kind == kindContainerLinuxConfig || u.kind == kindButane
 }
 
+// Returns true is the UserData is of kind KindEmpty.
+func (u *UserData) IsEmpty() bool {
+	return u.kind == kindEmpty
+}
+
 // Render parses userdata and returns a new Conf. It returns an error if the
 // userdata can't be parsed.
 func (u *UserData) Render(ctPlatform string) (*Conf, error) {
@@ -335,6 +341,7 @@ func (u *UserData) Render(ctPlatform string) (*Conf, error) {
 	case kindScript:
 		// pass through scripts unmodified, you are on your own.
 		c.script = u.data
+		c.isScript = true
 	case kindMultipartMime:
 		data, err := NewMultipartUserdata(u.data)
 		if err != nil {
@@ -720,6 +727,14 @@ chmod %o %s
 `, path, contents, mode, path)
 }
 
+// AppendScriptCommands appends raw shell commands to a script-type config.
+// This is a no-op for non-script configs (ignition, cloud-config, etc.).
+func (c *Conf) AppendScriptCommands(commands string) {
+	if c.isScript {
+		c.script += commands
+	}
+}
+
 func (c *Conf) addFileMultipartMime(path, filesystem, contents string, mode int) {
 	header := textproto.MIMEHeader{
 		"Content-Type":              []string{"text/cloud-config; charset=\"us-ascii\""},
@@ -889,11 +904,15 @@ func (c *Conf) addSystemdUnitV33(name, contents string, enable bool) {
 }
 
 func (c *Conf) addSystemdUnitCloudConfig(name, contents string, enable bool) {
-	c.cloudconfig.CoreOS.Units = append(c.cloudconfig.CoreOS.Units, cci.Unit{
+	u := cci.Unit{
 		Name:    name,
 		Content: contents,
 		Enable:  enable,
-	})
+	}
+	if enable {
+		u.Command = "start"
+	}
+	c.cloudconfig.CoreOS.Units = append(c.cloudconfig.CoreOS.Units, u)
 }
 
 func (c *Conf) AddSystemdUnit(name, contents string, enable bool) {
@@ -917,6 +936,152 @@ func (c *Conf) AddSystemdUnit(name, contents string, enable bool) {
 		c.addSystemdUnitV33(name, contents, enable)
 	} else if c.cloudconfig != nil {
 		c.addSystemdUnitCloudConfig(name, contents, enable)
+	} else if c.multipartMime != nil {
+		c.addSystemdUnitMultipartMime(name, contents, enable)
+	}
+}
+
+func (c *Conf) addSystemdUnitMultipartMime(name, contents string, enable bool) {
+	header := textproto.MIMEHeader{
+		"Content-Type":              []string{"text/cloud-config; charset=\"us-ascii\""},
+		"MIME-Version":              []string{"1.0"},
+		"Content-Transfer-Encoding": []string{"7bit"},
+		"Content-Disposition":       []string{fmt.Sprintf("attachment; filename=%q", name+".yaml")},
+	}
+	u := cci.Unit{
+		Name:    name,
+		Content: contents,
+		Enable:  enable,
+	}
+	if enable {
+		u.Command = "start"
+	}
+	cc := cci.CloudConfig{}
+	cc.CoreOS.Units = []cci.Unit{u}
+	asYaml, err := yaml.Marshal(cc)
+	if err != nil {
+		plog.Errorf("failed to marshal yaml: %v", err)
+		return
+	}
+	c.multipartMime.AddPart(header, asYaml)
+}
+
+// MaskSystemdUnit masks a systemd unit via ignition or cloud-config.
+// For ignition configs, this uses the native mask field.
+// For cloud-config, this creates a unit entry with mask: true.
+// This is a no-op for script and multipart-mime configs.
+func (c *Conf) MaskSystemdUnit(name string) {
+	maskTrue := true
+	if c.ignitionV1 != nil {
+		for i, unit := range c.ignitionV1.Systemd.Units {
+			if unit.Name == v1types.SystemdUnitName(name) {
+				c.ignitionV1.Systemd.Units[i].Mask = true
+				return
+			}
+		}
+		c.ignitionV1.Systemd.Units = append(c.ignitionV1.Systemd.Units, v1types.SystemdUnit{
+			Name: v1types.SystemdUnitName(name),
+			Mask: true,
+		})
+	} else if c.ignitionV2 != nil {
+		for i, unit := range c.ignitionV2.Systemd.Units {
+			if unit.Name == v2types.SystemdUnitName(name) {
+				c.ignitionV2.Systemd.Units[i].Mask = true
+				return
+			}
+		}
+		c.ignitionV2.Systemd.Units = append(c.ignitionV2.Systemd.Units, v2types.SystemdUnit{
+			Name: v2types.SystemdUnitName(name),
+			Mask: true,
+		})
+	} else if c.ignitionV21 != nil {
+		for i, unit := range c.ignitionV21.Systemd.Units {
+			if unit.Name == name {
+				c.ignitionV21.Systemd.Units[i].Mask = true
+				return
+			}
+		}
+		c.ignitionV21.Systemd.Units = append(c.ignitionV21.Systemd.Units, v21types.Unit{
+			Name: name,
+			Mask: true,
+		})
+	} else if c.ignitionV22 != nil {
+		for i, unit := range c.ignitionV22.Systemd.Units {
+			if unit.Name == name {
+				c.ignitionV22.Systemd.Units[i].Mask = true
+				return
+			}
+		}
+		c.ignitionV22.Systemd.Units = append(c.ignitionV22.Systemd.Units, v22types.Unit{
+			Name: name,
+			Mask: true,
+		})
+	} else if c.ignitionV23 != nil {
+		for i, unit := range c.ignitionV23.Systemd.Units {
+			if unit.Name == name {
+				c.ignitionV23.Systemd.Units[i].Mask = true
+				return
+			}
+		}
+		c.ignitionV23.Systemd.Units = append(c.ignitionV23.Systemd.Units, v23types.Unit{
+			Name: name,
+			Mask: true,
+		})
+	} else if c.ignitionV3 != nil {
+		for i, unit := range c.ignitionV3.Systemd.Units {
+			if unit.Name == name {
+				c.ignitionV3.Systemd.Units[i].Mask = &maskTrue
+				return
+			}
+		}
+		c.ignitionV3.Systemd.Units = append(c.ignitionV3.Systemd.Units, v3types.Unit{
+			Name: name,
+			Mask: &maskTrue,
+		})
+	} else if c.ignitionV31 != nil {
+		for i, unit := range c.ignitionV31.Systemd.Units {
+			if unit.Name == name {
+				c.ignitionV31.Systemd.Units[i].Mask = &maskTrue
+				return
+			}
+		}
+		c.ignitionV31.Systemd.Units = append(c.ignitionV31.Systemd.Units, v31types.Unit{
+			Name: name,
+			Mask: &maskTrue,
+		})
+	} else if c.ignitionV32 != nil {
+		for i, unit := range c.ignitionV32.Systemd.Units {
+			if unit.Name == name {
+				c.ignitionV32.Systemd.Units[i].Mask = &maskTrue
+				return
+			}
+		}
+		c.ignitionV32.Systemd.Units = append(c.ignitionV32.Systemd.Units, v32types.Unit{
+			Name: name,
+			Mask: &maskTrue,
+		})
+	} else if c.ignitionV33 != nil {
+		for i, unit := range c.ignitionV33.Systemd.Units {
+			if unit.Name == name {
+				c.ignitionV33.Systemd.Units[i].Mask = &maskTrue
+				return
+			}
+		}
+		c.ignitionV33.Systemd.Units = append(c.ignitionV33.Systemd.Units, v33types.Unit{
+			Name: name,
+			Mask: &maskTrue,
+		})
+	} else if c.cloudconfig != nil {
+		for i, unit := range c.cloudconfig.CoreOS.Units {
+			if unit.Name == name {
+				c.cloudconfig.CoreOS.Units[i].Mask = true
+				return
+			}
+		}
+		c.cloudconfig.CoreOS.Units = append(c.cloudconfig.CoreOS.Units, cci.Unit{
+			Name: name,
+			Mask: true,
+		})
 	}
 }
 
@@ -1333,12 +1498,31 @@ func (c *Conf) copyKeysIgnitionV33(keys []*agent.Key) {
 }
 
 func (c *Conf) copyKeysCloudConfig(keys []*agent.Key) {
-	c.cloudconfig.SSHAuthorizedKeys = append(c.cloudconfig.SSHAuthorizedKeys, keysToStrings(keys)...)
+	keyStrings := keysToStrings(keys)
+	user := c.user
+	if user == "" {
+		user = "core"
+	}
+	// Inject keys via the users: section so coreos-cloudinit creates the
+	// user if it doesn't exist, or updates it if it does.
+	// Do NOT specify groups — groups like "docker" may not exist during
+	// early boot (they come from sysexts loaded later), and a missing group
+	// causes useradd to fail. Groups are handled by kola-core-setup.service.
+	c.cloudconfig.Users = append(c.cloudconfig.Users, cci.User{
+		Name:              user,
+		SSHAuthorizedKeys: keyStrings,
+		Shell:             "/bin/bash",
+	})
 }
 
 func (c *Conf) copyKeysScript(keys []*agent.Key) {
 	keyString := strings.Join(keysToStrings(keys), "\n")
 	c.script = strings.Replace(c.script, "@SSH_KEYS@", keyString, -1)
+	user := c.user
+	if user == "" {
+		user = "core"
+	}
+	c.script = strings.Replace(c.script, "@KOLA_USER@", user, -1)
 }
 
 func (c *Conf) copyKeysMultipartMime(keys []*agent.Key) {
@@ -1350,8 +1534,27 @@ func (c *Conf) copyKeysMultipartMime(keys []*agent.Key) {
 		"Content-Disposition":       []string{"attachment; filename=\"testing-keys.yaml\""},
 	}
 
-	udata := map[string][]string{
-		"ssh_authorized_keys": keysAsStrings,
+	user := c.user
+	if user == "" {
+		user = "core"
+	}
+	// Inject keys via the users: section so coreos-cloudinit creates the
+	// user if it doesn't exist, or updates it if it does.
+	// Do NOT specify groups — groups like "docker" may not exist during
+	// early boot. Groups are handled by kola-core-setup.service.
+	type mimeUser struct {
+		Name              string   `yaml:"name"`
+		SSHAuthorizedKeys []string `yaml:"ssh_authorized_keys"`
+		Shell             string   `yaml:"shell"`
+	}
+	udata := map[string][]mimeUser{
+		"users": {
+			{
+				Name:              user,
+				SSHAuthorizedKeys: keysAsStrings,
+				Shell:             "/bin/bash",
+			},
+		},
 	}
 
 	asYaml, err := yaml.Marshal(udata)

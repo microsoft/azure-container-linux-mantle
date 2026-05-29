@@ -61,12 +61,12 @@ func init() {
 		Run:         dockerSELinux,
 		ClusterSize: 1,
 		Name:        "docker.selinux",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		MinVersion:  semver.Version{Major: 2942},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
 		// Skip AVC checks, we will do our own.
-		Flags: []register.Flag{register.NoSELinuxAVCChecks},
+		Flags: []register.Flag{register.NoSELinuxAVCChecks, register.NeedsDocker},
 	})
 	register.Register(&register.Test{
 		Run:         dockerNetworkNmapNcat,
@@ -103,9 +103,10 @@ func init() {
 		Run:         dockerUserns,
 		ClusterSize: 1,
 		Name:        "docker.userns",
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		Flags:     []register.Flag{register.NeedsDocker},
 		UserData: conf.ContainerLinuxConfig(`
 systemd:
   units:
@@ -146,9 +147,10 @@ passwd:
 		Run:         dockerBaseTests,
 		ClusterSize: 1,
 		Name:        `docker.base`,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		Flags:     []register.Flag{register.NeedsDocker},
 	})
 
 	register.Register(&register.Test{
@@ -198,7 +200,8 @@ systemd:
         Where=/var/lib/docker
         Type=btrfs
         Options=loop,discard`),
-		Distros: []string{"cl"},
+		Distros: []string{"acl", "cl"},
+		Flags:   []register.Flag{register.NeedsDocker},
 	})
 
 	register.Register(&register.Test{
@@ -278,9 +281,10 @@ systemd:
 		Name:        "docker.containerd-restart",
 		Run:         dockerContainerdRestart,
 		ClusterSize: 1,
-		Distros:     []string{"cl"},
+		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		Flags:     []register.Flag{register.NeedsDocker},
 		UserData: conf.ContainerLinuxConfig(`
 systemd:
   units:
@@ -295,6 +299,13 @@ func GenDockerImage(c cluster.TestCluster, m platform.Machine, name string, binn
 	        b=$(which %s); libs=$(sudo ldd $b | grep -o /lib'[^ ]*' | sort -u);
 	        sudo rsync -av --relative --copy-links $b $libs ./;
 	        sudo docker build -t %s .`
+	if kola.Options.Distribution == "acl" {
+		cmd = `tmpdir=$(mktemp -d); cd $tmpdir; echo -e "FROM scratch\nCOPY . /" > Dockerfile;
+	        b=$(which %s); libs=$(sudo ldd $b | grep -oE '/[^ ]*\.so[^ ]*' | sort -u);
+	        sudo rsync -av --relative --copy-links $b $libs ./;
+	        for d in /lib /lib64; do [ -L "$d" ] && [ ! -e ".$d" ] && sudo ln -s "$(readlink "$d")" ".$d"; done;
+	        sudo docker build -t %s .`
+	}
 
 	c.MustSSH(m, fmt.Sprintf(cmd, strings.Join(binnames, " "), name))
 }
@@ -338,7 +349,6 @@ func dockerResources(c cluster.TestCluster) {
 		dCmd("--cpu-period=1000 --cpu-quota=1000"),
 		dCmd("--cpuset-cpus=0"),
 		dCmd("--cpuset-mems=0"),
-		dCmd("--blkio-weight=10"),
 		// none of these work in QEMU due to apparent lack of cfq for
 		// blkio in virtual block devices.
 		//dCmd("--blkio-weight-device=/dev/vda:10"),
@@ -350,6 +360,9 @@ func dockerResources(c cluster.TestCluster) {
 		dCmd("--memory-swappiness=50"),
 		dCmd("--shm-size=1m"),
 		dCmd("--security-opt=label=disable --security-opt=no-new-privileges"),
+	}
+	if kola.Options.Distribution != "acl" {
+		cases = append(cases, dCmd("--blkio-weight=10"))
 	}
 	serverVersion := getDockerServerVersion(c, m)
 	if !strings.HasPrefix(serverVersion, "1.12") {
@@ -526,6 +539,13 @@ func dockerUserns(c cluster.TestCluster) {
 // Also, hopefully will catch any similar issues
 func dockerNetworksReliably(c cluster.TestCluster) {
 	m := c.Machines()[0]
+
+	if kola.Options.Distribution == "acl" {
+		// On ACL, the default iptables INPUT policy is DROP and ICMP echo
+		// requests are not allowed. Accept all traffic on docker0 so that
+		// containers can ping the bridge gateway (172.17.0.1).
+		c.MustSSH(m, `sudo iptables -C INPUT -i docker0 -j ACCEPT 2>/dev/null || sudo iptables -A INPUT -i docker0 -j ACCEPT`)
+	}
 
 	GenDockerImage(c, m, "ping", []string{"sh", "ping"})
 
@@ -812,12 +832,14 @@ docker run -v "/etc/misc:/opt" --rm ghcr.io/flatcar/busybox true`
 	// partition) and different SELinux context. On newer Flatcar
 	// versions, /etc is an overlay.
 	//
+	// ACL always uses the modern overlay /etc and container_t domain.
+	//
 	// TODO: Drop it when LTS-2023 becomes unsupported.
 	var (
 		dev     string
 		context string
 	)
-	if sv.LessThan(semver.Version{Major: 3510, Minor: 4}) {
+	if kola.Options.Distribution != "acl" && sv.LessThan(semver.Version{Major: 3510, Minor: 4}) {
 		dev = "vda[0-9]*"
 		context = "svirt_lxc_net_t"
 	} else {
@@ -825,7 +847,7 @@ docker run -v "/etc/misc:/opt" --rm ghcr.io/flatcar/busybox true`
 		context = "container_t"
 	}
 	r := regexp.MustCompile(fmt.Sprintf(`avc:  denied  { write } for  pid=[0-9]* comm="sh" name="misc" dev="%s" ino=[0-9]* scontext=system_u:system_r:%s:s0:c[0-9]*,c[0-9]* tcontext=system_u:object_r:etc_t:s0 tclass=dir permissive=0`, dev, context))
-	if sv.LessThan(semver.Version{Major: kola.AVCChecksMajorVersion}) {
+	if kola.Options.Distribution != "acl" && sv.LessThan(semver.Version{Major: kola.AVCChecksMajorVersion}) {
 		// old Flatcar, lenient checks
 		found := false
 		for s.Scan() {

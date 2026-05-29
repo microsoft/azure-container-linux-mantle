@@ -28,6 +28,9 @@ func (a *API) CreateResourceGroup(prefix string) (string, error) {
 		"createdAt": to.Ptr(time.Now().Format(time.RFC3339)),
 		"createdBy": to.Ptr("mantle"),
 	}
+	for k, v := range a.Opts.ResourceGroupTags {
+		tags[k] = to.Ptr(v)
+	}
 	plog.Infof("Creating ResourceGroup %s", name)
 	r, err := a.rgClient.CreateOrUpdate(context.TODO(), name, armresources.ResourceGroup{
 		Location: &a.Opts.Location,

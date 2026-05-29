@@ -19,6 +19,20 @@ variant: flatcar
 version: 1.0.0
 systemd:
   units:
+{{- if .openFirewall }}
+    - name: k8s-firewall.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Open firewall for Kubernetes inter-node traffic
+        After=iptables.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=true
+        ExecStart=/usr/sbin/iptables -A INPUT -s {{ .TrustedCIDR }} -j ACCEPT
+        [Install]
+        WantedBy=multi-user.target
+{{- end }}
 {{- if .cgroupv1 }}
     - name: containerd.service
       dropins:
@@ -51,6 +65,20 @@ variant: flatcar
 version: 1.0.0
 systemd:
   units:
+{{- if .openFirewall }}
+  - name: k8s-firewall.service
+    enabled: true
+    contents: |
+      [Unit]
+      Description=Open firewall for Kubernetes inter-node traffic
+      After=iptables.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=true
+      ExecStart=/usr/sbin/iptables -A INPUT -s {{ .TrustedCIDR }} -j ACCEPT
+      [Install]
+      WantedBy=multi-user.target
+{{- end }}
 {{- if .cgroupv1 }}
   - name: containerd.service
     dropins:
@@ -272,6 +300,8 @@ EOF
 {{ end }}
 
 {
+    # Enable IP forwarding required by Kubernetes networking
+    sysctl -w net.ipv4.ip_forward=1
     kubeadm config images pull
     kubeadm init --config kubeadm-config.yaml
     mkdir --parent "${HOME}"/.kube /home/core/.kube
@@ -345,6 +375,8 @@ EOF
 systemctl start --quiet coreos-metadata
 ipv4=$(cat /run/metadata/flatcar | grep -v -E '(IPV6|GATEWAY)' | grep IP | grep -E '({{ if eq .Platform "do" }}PUBLIC{{ else }}PRIVATE{{ end }}|LOCAL|DYNAMIC)' | cut -d = -f 2)
 
+# Enable IP forwarding required by Kubernetes networking
+sysctl -w net.ipv4.ip_forward=1
 kubeadm join --config worker-config.yaml --node-name "${ipv4}"
 `
 )
