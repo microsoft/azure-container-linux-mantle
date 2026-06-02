@@ -216,9 +216,15 @@ var (
 			skipFlag: &[]register.Flag{register.NoEmergencyShellCheck}[0],
 		},
 		{
-			desc:     "systemd dependency unit failed to start",
-			match:    regexp.MustCompile("Dependency failed for (.*)"),
-			skipFlag: &[]register.Flag{register.NoEmergencyShellCheck}[0],
+			desc:        "systemd dependency unit failed to start",
+			match:       regexp.MustCompile("Dependency failed for (.*)"),
+			skipIfMatch: regexp.MustCompile("Dependency failed for (.*verity.*)"),
+			skipFlag:    &[]register.Flag{register.NoEmergencyShellCheck}[0],
+		},
+		{
+			desc:     "systemd dependency unit related to verity failed to start",
+			match:    regexp.MustCompile("Dependency failed for (.*verity.*)"),
+			skipFlag: &[]register.Flag{register.NoVerityCorruptionCheck}[0],
 		},
 		{
 			desc:  "systemd default target unit dependencies not met",

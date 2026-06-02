@@ -37,8 +37,25 @@ func GetUsrDeviceNode(c cluster.TestCluster, m platform.Machine) string {
 		return string(c.MustSSH(m, "rootdev -s /usr"))
 	} else {
 		// ACL doesn't include seismograph, which includes rootdev
-		usrdev := c.MustSSH(m, "sudo dmsetup info --noheadings -Co blkdevs_used usr")
-		return "/dev/" + string(usrdev)
+		datadev := c.MustSSH(m, "sudo veritysetup status usr | grep 'data device' | cut -d ':' -f 2 | xargs")
+		if len(datadev) == 0 {
+			c.Fatalf("data device not found in veritysetup status output")
+		}
+		return string(datadev)
+
+	}
+}
+
+func GetUsrHashDeviceNode(c cluster.TestCluster, m platform.Machine) string {
+	if kola.Options.Distribution != "acl" {
+		return GetUsrDeviceNode(c, m)
+	} else {
+		// ACL doesn't include seismograph, which includes rootdev
+		hashdev := c.MustSSH(m, "sudo veritysetup status usr | grep 'hash device' | cut -d ':' -f 2 | xargs")
+		if len(hashdev) == 0 {
+			c.Fatalf("hash device not found in veritysetup status output")
+		}
+		return string(hashdev)
 	}
 }
 
