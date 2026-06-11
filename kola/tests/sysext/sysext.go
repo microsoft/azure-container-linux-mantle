@@ -297,7 +297,7 @@ storage:
 		Name:        "sysext.custom-oem",
 		Run:         checkSysextCustomOEM,
 		ClusterSize: 0,
-		Distros:     []string{"acl", "cl"},
+		Distros:     []string{"cl"},
 		// This test is uses its own OEM files and shouldn't run on other platforms
 		Platforms:  []string{"qemu", "qemu-unpriv"},
 		MinVersion: semver.Version{Major: 3603},

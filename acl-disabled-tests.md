@@ -35,6 +35,7 @@ The following tests are currently disabled in ACL:
 |docker.oldclient|No longer running against latest upstream.|
 |cl.ignition.kargs|Enabled for grub boot mode only. ACL UKI (systemd-boot) mode does not yet support dynamic kernel argument injection via addons.|
 |cl.osreset.ignition-rerun|flatcar-reset uses dynamic kernel argument injection, not yet supported.|
+|sysext.custom-oem|Depends on flatcar-reset, which is not currently supported in ACL|
 
 
 ## Modified Tests
