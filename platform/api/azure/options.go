@@ -50,8 +50,13 @@ type Options struct {
 	HyperVGeneration string
 	VnetSubnetName   string
 	KolaVnet         string
-	UseGallery       bool
-	UsePrivateIPs    bool
+	// VnetResourceGroup scopes the lookup of VnetSubnetName / KolaVnet to a
+	// specific resource group. It disambiguates virtual-network names that are
+	// not unique across the subscription. Ignored when the vnet is given as a
+	// fully-qualified resource ID.
+	VnetResourceGroup string
+	UseGallery        bool
+	UsePrivateIPs     bool
 
 	DiskController string
 
