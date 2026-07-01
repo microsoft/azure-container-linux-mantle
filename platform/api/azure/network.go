@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v5"
 )
@@ -31,14 +32,65 @@ var (
 	kolaVnet                   = "kola-vn"
 )
 
+// findVnetSubnet resolves a pre-existing subnet from a vnet/subnet specifier.
+//
+// The specifier may be either:
+//
+//   - a fully-qualified Azure resource ID of a subnet or virtual network, e.g.
+//     "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<subnet>";
+//   - a "<vnet>/<subnet>" name pair (a bare "<vnet>" implies the "default" subnet).
+//
+// When only a name is given, the lookup is scoped to a.Opts.VnetResourceGroup
+// when set; otherwise every virtual network in the subscription is searched by
+// name. A name-only search is ambiguous when multiple resource groups contain a
+// virtual network with the same name (e.g. parallel dev/prod environments that
+// reuse names and CIDRs), so rather than silently picking one — which can place
+// instances in a network the caller cannot reach — an error is returned listing
+// the candidates. Pass a resource group or a fully-qualified resource ID to
+// disambiguate.
 func (a *API) findVnetSubnet(vnetSubnetStr string) (Network, error) {
+	// A fully-qualified resource ID is unambiguous; use it directly. ARM
+	// resource IDs are case-insensitive, so match the prefix that way too.
+	if strings.HasPrefix(strings.ToLower(vnetSubnetStr), "/subscriptions/") {
+		id, err := arm.ParseResourceID(vnetSubnetStr)
+		if err != nil {
+			return Network{}, fmt.Errorf("parsing vnet/subnet resource ID %q: %w", vnetSubnetStr, err)
+		}
+		// The network client is bound to a.subID, so only the resource group and
+		// names from the ID are honored — the subscription segment is not. Reject
+		// an ID for a different subscription rather than silently resolving the
+		// same names in a.subID (the exact wrong-network class this guards against).
+		if a.subID != "" && id.SubscriptionID != "" && !strings.EqualFold(id.SubscriptionID, a.subID) {
+			return Network{}, fmt.Errorf("vnet/subnet resource ID %q is in subscription %s, but kola is configured for subscription %s", vnetSubnetStr, id.SubscriptionID, a.subID)
+		}
+		switch {
+		case strings.EqualFold(id.ResourceType.String(), "Microsoft.Network/virtualNetworks/subnets"):
+			if id.Parent == nil {
+				return Network{}, fmt.Errorf("subnet resource ID %q has no parent virtual network", vnetSubnetStr)
+			}
+			return a.getVnetSubnet(id.ResourceGroupName, id.Parent.Name, id.Name)
+		case strings.EqualFold(id.ResourceType.String(), "Microsoft.Network/virtualNetworks"):
+			return a.getVnetSubnet(id.ResourceGroupName, id.Name, "default")
+		default:
+			return Network{}, fmt.Errorf("resource ID %q is not a virtual network or subnet", vnetSubnetStr)
+		}
+	}
+
 	parts := strings.SplitN(vnetSubnetStr, "/", 2)
 	vnetName := parts[0]
 	subnetName := "default"
 	if len(parts) > 1 {
 		subnetName = parts[1]
 	}
-	var net *armnetwork.VirtualNetwork
+
+	// A resource-group-scoped lookup is deterministic.
+	if a.Opts.VnetResourceGroup != "" {
+		return a.getVnetSubnet(a.Opts.VnetResourceGroup, vnetName, subnetName)
+	}
+
+	// Otherwise search the whole subscription by name, failing if the name is
+	// ambiguous across resource groups.
+	var matches []*armnetwork.VirtualNetwork
 	pager := a.netClient.NewListAllPager(nil)
 	for pager.More() {
 		page, err := pager.NextPage(context.TODO())
@@ -46,23 +98,49 @@ func (a *API) findVnetSubnet(vnetSubnetStr string) (Network, error) {
 			return Network{}, fmt.Errorf("failed to iterate vnets: %w", err)
 		}
 		for _, vnet := range page.Value {
-			if vnet.Name != nil && *vnet.Name == vnetName {
-				net = vnet
-				break
+			if vnet != nil && vnet.Name != nil && *vnet.Name == vnetName {
+				matches = append(matches, vnet)
 			}
 		}
-		if net != nil {
-			break
-		}
 	}
-	if net == nil {
+	switch len(matches) {
+	case 0:
 		return Network{}, fmt.Errorf("failed to find vnet %s", vnetName)
+	case 1:
+		return subnetFromVnet(matches[0], subnetName)
+	default:
+		ids := make([]string, 0, len(matches))
+		for _, m := range matches {
+			if m.ID != nil {
+				ids = append(ids, *m.ID)
+			}
+		}
+		return Network{}, fmt.Errorf("found %d virtual networks named %q in the subscription; "+
+			"pass --azure-vnet-resource-group or a fully-qualified resource ID to disambiguate (candidates: %s)",
+			len(matches), vnetName, strings.Join(ids, ", "))
 	}
-	subnets := net.Properties.Subnets
-	if subnets == nil {
+}
+
+// getVnetSubnet fetches a named subnet from a virtual network in a known
+// resource group.
+func (a *API) getVnetSubnet(resourceGroup, vnetName, subnetName string) (Network, error) {
+	resp, err := a.netClient.Get(context.TODO(), resourceGroup, vnetName, nil)
+	if err != nil {
+		return Network{}, fmt.Errorf("failed to get vnet %s in resource group %s: %w", vnetName, resourceGroup, err)
+	}
+	return subnetFromVnet(&resp.VirtualNetwork, subnetName)
+}
+
+// subnetFromVnet returns the named subnet from an already-resolved virtual network.
+func subnetFromVnet(vnet *armnetwork.VirtualNetwork, subnetName string) (Network, error) {
+	vnetName := "<unknown>"
+	if vnet != nil && vnet.Name != nil {
+		vnetName = *vnet.Name
+	}
+	if vnet == nil || vnet.Properties == nil || vnet.Properties.Subnets == nil {
 		return Network{}, fmt.Errorf("failed to find subnet %s in vnet %s", subnetName, vnetName)
 	}
-	for _, subnet := range subnets {
+	for _, subnet := range vnet.Properties.Subnets {
 		if subnet != nil && subnet.Name != nil && *subnet.Name == subnetName {
 			return Network{*subnet}, nil
 		}
