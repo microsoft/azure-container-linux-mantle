@@ -109,8 +109,8 @@ func (a *SSHAgent) Close() error {
 	return os.RemoveAll(a.sockDir)
 }
 
-// Add port to host if not already set.
-func ensurePortSuffix(host string, port int) string {
+// EnsurePortSuffix adds port to host if not already set.
+func EnsurePortSuffix(host string, port int) string {
 	switch {
 	case !strings.Contains(host, ":"):
 		return fmt.Sprintf("%s:%d", host, port)
@@ -131,7 +131,7 @@ func (a *SSHAgent) newClient(host string, user string, auth []ssh.AuthMethod) (*
 		Auth:            auth,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
-	addr := ensurePortSuffix(host, defaultPort)
+	addr := EnsurePortSuffix(host, defaultPort)
 	tcpconn, err := a.Dial("tcp", addr)
 	if err != nil {
 		return nil, err

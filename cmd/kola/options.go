@@ -41,7 +41,7 @@ var (
 	kolaDisableSELinuxAVCChecks bool
 	defaultTargetBoard          = sdk.DefaultBoard()
 	kolaArchitectures           = []string{"amd64"}
-	kolaPlatforms               = []string{"akamai", "aws", "azure", "brightbox", "do", "esx", "external", "gce", "hetzner", "openstack", "qemu", "qemu-unpriv", "scaleway", "stackit"}
+	kolaPlatforms               = []string{"akamai", "aws", "azure", "brightbox", "byon", "do", "esx", "external", "gce", "hetzner", "openstack", "qemu", "qemu-unpriv", "scaleway", "stackit"}
 	kolaDistros                 = []string{"acl", "cl", "fcos", "rhcos"}
 	kolaChannels                = []string{"alpha", "beta", "stable", "edge", "lts"}
 	kolaOfferings               = []string{"basic", "pro"}
@@ -156,6 +156,11 @@ func init() {
 	sv(&kola.ESXOptions.FirstStaticIpPrivate, "esx-first-static-ip-private", "", "First available private IP (only needed for static IP addresses)")
 	root.PersistentFlags().IntVarP(&kola.ESXOptions.StaticSubnetSize, "esx-subnet-size", "", 0, "Subnet size (only needed for static IP addresses)")
 
+	// byon (bring-your-own-node) specific options
+	sv(&kola.ByonOptions.User, "byon-user", "", "BYON platform: SSH user for the pre-existing node (needs passwordless sudo)")
+	sv(&kola.ByonOptions.SSHKeyFile, "byon-ssh-key", "", "BYON platform: path to a private SSH key already authorized on the node")
+	sv(&kola.ByonOptions.Node, "byon-node", "", "BYON platform: pre-existing node address as HOST[:PORT] (PORT defaults to 22)")
+
 	// external-specific options
 	sv(&kola.ExternalOptions.ManagementUser, "external-user", "", "External platform management SSH user")
 	sv(&kola.ExternalOptions.ManagementPassword, "external-password", "", "External platform management SSH password")
@@ -253,6 +258,7 @@ func syncOptions() error {
 	kola.AzureOptions.Board = board
 	kola.AWSOptions.Board = board
 	kola.BrightboxOptions.Board = board
+	kola.ByonOptions.Board = board
 	kola.ScalewayOptions.Board = board
 	kola.HetznerOptions.Board = board
 	kola.AkamaiOptions.Board = board
@@ -281,6 +287,19 @@ func syncOptions() error {
 
 	if err := validateOption("distro", kola.Options.Distribution, kolaDistros); err != nil {
 		return err
+	}
+
+	// byon currently supports a single node, and each test claims it exclusively.
+	if kolaPlatform == "byon" && kola.TestParallelism > 1 {
+		return fmt.Errorf("byon platform requires --parallel=1 (single node), got %d", kola.TestParallelism)
+	}
+
+	// byon does not create or destroy the node, so --remove has no node to
+	// keep. Force it on regardless, otherwise the node lease is never released
+	// back to the single-node pool and later tests starve.
+	if kolaPlatform == "byon" && !runRemove {
+		plog.Warning("byon platform ignores --remove=false; the node is never destroyed")
+		runRemove = true
 	}
 
 	image, ok := kolaDefaultImages[kola.QEMUOptions.Board]

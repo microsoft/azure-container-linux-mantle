@@ -51,6 +51,7 @@ type Test struct {
 	ClusterSize      int
 	Platforms        []string // whitelist of platforms to run test against -- defaults to all
 	ExcludePlatforms []string // blacklist of platforms to ignore -- defaults to none
+	SupportsByon     bool     // opt in to the byon platform, which is opt-in only -- defaults to off
 	Distros          []string // whitelist of distributions to run test against -- defaults to all
 	ExcludeDistros   []string // blacklist of distributions to ignore -- defaults to none
 	Channels         []string // whitelist of channels to run test against -- defaults to all

@@ -30,7 +30,8 @@ func init() {
 		Name:        "cl.filesystem",
 		Distros:     []string{"acl", "cl"},
 		// This test is normally not related to the cloud environment
-		Platforms: []string{"qemu", "qemu-unpriv"},
+		Platforms:    []string{"qemu", "qemu-unpriv"},
+		SupportsByon: true,
 	})
 }
 
