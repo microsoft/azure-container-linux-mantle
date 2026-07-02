@@ -46,3 +46,7 @@ extends:
     aclRef: 'aclmain'
     mantleRef: $(Build.SourceBranch)
     buildMantle: true
+    # Smoke tests are not needed for mantle PR validation; kola QEMU tests
+    # still run and provide the actual validation coverage.
+    runSmokeQemu: false
+    runSmokeAzure: false
