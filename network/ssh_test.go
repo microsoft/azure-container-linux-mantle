@@ -51,7 +51,7 @@ func TestEnsurePortSuffix(t *testing.T) {
 	}
 
 	for input, expect := range tests {
-		output := ensurePortSuffix(input, defaultPort)
+		output := EnsurePortSuffix(input, defaultPort)
 		if output != expect {
 			t.Errorf("Got result %q, expected %q", output, expect)
 		}

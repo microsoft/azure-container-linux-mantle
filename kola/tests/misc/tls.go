@@ -36,7 +36,8 @@ func init() {
 		Name:           "coreos.tls.fetch-urls",
 		ExcludeDistros: []string{"rhcos", "fcos"}, // wget not included in *COS
 		// This test is normally not related to the cloud environment (and we have other tests for networking)
-		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		Platforms:    []string{"qemu", "qemu-unpriv", "azure"},
+		SupportsByon: true,
 	})
 }
 

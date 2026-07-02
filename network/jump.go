@@ -30,7 +30,7 @@ func NewJumpDialer(addr, user, keyfile string) (*RetryDialer, error) {
 		},
 	}
 
-	addr = ensurePortSuffix(addr, defaultPort)
+	addr = EnsurePortSuffix(addr, defaultPort)
 	client, err := ssh.Dial("tcp", addr, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("creating SSH client: %w", err)

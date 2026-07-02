@@ -34,7 +34,8 @@ func init() {
 		Name:        "coreos.selinux.enforce",
 		Distros:     []string{"acl", "cl", "fcos", "rhcos"},
 		// This test is normally not related to the cloud environment
-		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		Platforms:    []string{"qemu", "qemu-unpriv", "azure"},
+		SupportsByon: true,
 	})
 	register.Register(&register.Test{
 		Run:         SelinuxBoolean,
@@ -42,7 +43,8 @@ func init() {
 		Name:        "coreos.selinux.boolean",
 		Distros:     []string{"acl", "cl", "fcos", "rhcos"},
 		// This test is normally not related to the cloud environment
-		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		Platforms:    []string{"qemu", "qemu-unpriv", "azure"},
+		SupportsByon: true,
 		SkipFunc: func(version semver.Version, channel, arch, platform string) bool {
 			// Workaround to set the SELinux boolean name based of the Flatcar version.
 			// Note: it works only if we test '*'

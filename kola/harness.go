@@ -58,6 +58,7 @@ import (
 	"github.com/flatcar/mantle/platform/machine/aws"
 	"github.com/flatcar/mantle/platform/machine/azure"
 	"github.com/flatcar/mantle/platform/machine/brightbox"
+	"github.com/flatcar/mantle/platform/machine/byon"
 	"github.com/flatcar/mantle/platform/machine/do"
 	"github.com/flatcar/mantle/platform/machine/esx"
 	"github.com/flatcar/mantle/platform/machine/external"
@@ -82,6 +83,7 @@ var (
 	AWSOptions       = awsapi.Options{Options: &Options}       // glue to set platform options from main
 	AzureOptions     = azureapi.Options{Options: &Options}     // glue to set platform options from main
 	BrightboxOptions = brightboxapi.Options{Options: &Options} // glue to set platform options from main
+	ByonOptions      = byon.Options{Options: &Options}         // glue to set platform options from main
 	DOOptions        = doapi.Options{Options: &Options}        // glue to set platform options from main
 	ESXOptions       = esxapi.Options{Options: &Options}       // glue to set platform options from main
 	ExternalOptions  = external.Options{Options: &Options}     // glue to set platform options from main
@@ -257,6 +259,8 @@ func NewFlight(pltfrm string) (flight platform.Flight, err error) {
 		flight, err = azure.NewFlight(&AzureOptions)
 	case "brightbox":
 		flight, err = brightbox.NewFlight(&BrightboxOptions)
+	case "byon":
+		flight, err = byon.NewFlight(&ByonOptions)
 	case "do":
 		flight, err = do.NewFlight(&DOOptions)
 	case "esx":
@@ -359,14 +363,25 @@ func FilterTests(tests map[string]*register.Test, patterns []string, channel, of
 
 		isExcluded := false
 		allowed := false
-		for _, platform := range checkPlatforms {
-			allowedPlatform, excluded := isAllowed(platform, t.Platforms, t.ExcludePlatforms)
-			if excluded {
-				isExcluded = true
-				break
+		if pltfrm == "byon" {
+			// byon is opt-in only and ignores Platforms/ExcludePlatforms
+			// (those describe provisioning platforms). A test runs on byon
+			// only if it sets SupportsByon; arch restrictions still apply.
+			if !t.SupportsByon {
+				continue
 			}
-			allowedArchitecture, _ := isAllowed(architecture(platform), t.Architectures, []string{})
-			allowed = allowed || (allowedPlatform && allowedArchitecture)
+			allowedArch, _ := isAllowed(architecture(pltfrm), t.Architectures, []string{})
+			allowed = allowedArch
+		} else {
+			for _, platform := range checkPlatforms {
+				allowedPlatform, excluded := isAllowed(platform, t.Platforms, t.ExcludePlatforms)
+				if excluded {
+					isExcluded = true
+					break
+				}
+				allowedArchitecture, _ := isAllowed(architecture(platform), t.Architectures, []string{})
+				allowed = allowed || (allowedPlatform && allowedArchitecture)
+			}
 		}
 		if isExcluded || !allowed {
 			continue
@@ -721,6 +736,9 @@ func architecture(pltfrm string) string {
 	}
 	if pltfrm == "stackit" && STACKITOptions.Board != "" {
 		nativeArch = boardToArch(STACKITOptions.Board)
+	}
+	if pltfrm == "byon" && ByonOptions.Board != "" {
+		nativeArch = boardToArch(ByonOptions.Board)
 	}
 	return nativeArch
 }
