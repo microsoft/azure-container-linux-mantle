@@ -24,7 +24,9 @@ func init() {
 		Run:         kdumpUKITest,
 		ClusterSize: 1,
 		Name:        "acl.kdump",
-		Flags:       []register.Flag{register.NoKernelPanicCheck},
+		// NoKernelPanicCheck: test intentionally triggers a panic.
+		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
+		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
 		MinVersion:  semver.Version{Major: 3},
 		Distros:     []string{"acl"},
 		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
@@ -52,6 +54,9 @@ storage:
             cp "${TEMPLATE}" "${ADDON_DIR}/kdump.addon.efi"
             sync
             systemctl reboot --force
+          else
+            echo "kdump addon activation skipped: template=${TEMPLATE} exists=$(test -f "${TEMPLATE}" && echo y || echo n), addon already present=$(test -f "${ADDON_DIR}/kdump.addon.efi" && echo y || echo n)" >&2
+            exit 1
           fi
 systemd:
   units:
@@ -80,7 +85,9 @@ systemd:
 		Run:         kdumpGRUBTest,
 		ClusterSize: 1,
 		Name:        "acl.kdump.grub",
-		Flags:       []register.Flag{register.NoKernelPanicCheck},
+		// NoKernelPanicCheck: test intentionally triggers a panic.
+		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
+		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
 		MinVersion:  semver.Version{Major: 3},
 		Distros:     []string{"acl"},
 		Platforms:   []string{"qemu", "qemu-unpriv"},
@@ -135,7 +142,7 @@ func kdumpGRUBTest(c cluster.TestCluster) {
 	c.MustSSH(m, fmt.Sprintf(`sudo bash -c '
 		existing=""
 		if [ -f /oem/grub.cfg ]; then
-			existing=$(grep -oP "(?<=set linux_append=\").*(?=\")" /oem/grub.cfg || true)
+			existing=$(sed -n "s/^set linux_append=\"\([^\"]*\)\".*/\1/p" /oem/grub.cfg | head -n 1)
 		fi
 		echo "set linux_append=\"${existing} crashkernel=%s\"" | sudo tee /oem/grub.cfg > /dev/null
 	'`, crashkernelSize))
@@ -180,21 +187,16 @@ func kdumpVerifyAndCrash(c cluster.TestCluster) {
 
 	// Wait for the machine to come back after crash dump + reboot.
 	// The full cycle (panic -> kexec -> capture vmcore -> reboot -> network up)
-	// takes ~30s on amd64/QEMU but several minutes on aarch64 (TCG emulation).
-	// Retry SSH every 30s for up to 10 minutes.
+	// takes ~30s on amd64/QEMU but several minutes on aarch64.
+	// Give time for the dump to complete before checking SSH.
 	c.Logf("Waiting for VM to complete crash dump and reboot...")
-	var reconnected bool
-	for attempt := 1; attempt <= 20; attempt++ {
-		time.Sleep(30 * time.Second)
-		if err := platform.CheckMachine(context.TODO(), m); err == nil {
-			reconnected = true
-			c.Logf("VM back after ~%ds", attempt*30)
-			break
-		}
+	time.Sleep(30 * time.Second)
+
+	// CheckMachine already retries SSH (SSHRetries x SSHTimeout approx= 10 min).
+	if err := platform.CheckMachine(context.TODO(), m); err != nil {
+		c.Fatalf("Machine did not come back after crash: %v", err)
 	}
-	if !reconnected {
-		c.Fatalf("Machine did not come back after crash (waited 10 min)")
-	}
+	c.Logf("VM back after crash dump + reboot")
 
 	// 5. Verify a vmcore was captured in /var/crash (root-owned, needs sudo)
 	output := string(c.MustSSH(m, "sudo find /var/crash -name 'vmcore' -type f 2>/dev/null | head -5"))
