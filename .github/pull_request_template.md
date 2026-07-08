@@ -12,7 +12,7 @@
 <!-- Check all that apply -->
 - [ ] New kola test
 - [ ] Kola test fix/update
-- [ ] Platform integration change (Azure, Qemu, etc.)
+- [ ] Platform integration change (Azure, QEMU, etc.)
 - [ ] CLI/command change
 - [ ] CI/automation change
 - [ ] Bug fix
