@@ -43,6 +43,23 @@ func init() {
 		MinVersion:       semver.Version{Major: 2943},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		// Destructive: the corruption subtest bricks the node, so on byon the
+		// harness must point it at a throwaway node, not a real one.
+		SupportsByon: true,
+	})
+	// Non-destructive variant of cl.verity: skips VerityCorruption, which
+	// panics the node's kernel, so it is safe on non-throwaway byon nodes.
+	register.Register(&register.Test{
+		Run:              VerityVerify,
+		ClusterSize:      1,
+		Name:             "cl.verity-verify",
+		Distros:          []string{"acl", "cl"},
+		ExcludePlatforms: []string{"qemu-unpriv"},
+		MinVersion:       semver.Version{Major: 2943},
+		// This test is normally not related to the cloud environment
+		Platforms: []string{"qemu", "qemu-unpriv", "azure"},
+		// Read-only hash check
+		SupportsByon: true,
 	})
 }
 
