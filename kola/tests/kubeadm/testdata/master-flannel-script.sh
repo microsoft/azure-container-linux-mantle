@@ -43,6 +43,8 @@ EOF
 
 
 {
+    # Enable IP forwarding required by Kubernetes networking
+    sysctl -w net.ipv4.ip_forward=1
     kubeadm config images pull
     kubeadm init --config kubeadm-config.yaml
     mkdir --parent "${HOME}"/.kube /home/core/.kube
