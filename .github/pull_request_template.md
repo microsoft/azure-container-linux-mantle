@@ -35,8 +35,8 @@ Feel free to delete sections that do not apply to your PR, or add additional det
 ## Merge Checklist <!-- REQUIRED -->
 <!-- You can set them now ([x]) or set them later using the GitHub UI -->
 **All applicable** boxes should be checked before merging
-- [ ] `go build ./...` passes
-- [ ] Docker build succeeds (if applicable)
+- [ ] `go build ./...` passes (basic validation)
+- [ ] `docker build -t mantle .` succeeds (full multi-arch build; required for build-affecting changes)
 - [ ] `go test ./...` passes
 - [ ] `go vet ./...` reports no issues
 - [ ] Relevant kola tests pass against a test image
