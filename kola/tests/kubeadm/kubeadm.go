@@ -130,12 +130,17 @@ etcd:
 // master/worker nodes reach etcd:2379. CIDR is taken from
 // --trusted-source-cidr (default 10.0.0.0/8 in platform.Options).
 //
-// The etcd-member.service drop-in overrides ETCD_IMAGE to pull etcd from MCR
+// The etcd-member.service drop-in overrides ETCD_IMAGE_URL to pull etcd from MCR
 // (mcr.microsoft.com) instead of quay.io. The ACL image only bakes etcd v3.5.16,
 // so the etcd: version: 3.5.22 override above forces a runtime image pull; that
 // pull fails on the Azure kola pool because egress to quay.io is restricted,
 // which fails etcd health polling and every kubeadm.* test. MCR is reachable
 // from the Azure pool, so pulling v3.5.22 from there makes the etcd node come up.
+//
+// The flatcar etcd-wrapper builds the image reference from ETCD_IMAGE_URL
+// (default quay.io/coreos/etcd) and ETCD_IMAGE_TAG (set to v3.5.22 by the CLCT
+// etcd drop-in above). Only ETCD_IMAGE_URL is overridden here; a combined
+// ETCD_IMAGE variable is NOT honored by the wrapper.
 func etcdConfigAclWithCIDR(cidr string) *conf.UserData {
 	return conf.ContainerLinuxConfig(fmt.Sprintf(`
 etcd:
@@ -164,7 +169,7 @@ systemd:
         - name: "10-mcr-registry.conf"
           contents: |-
             [Service]
-            Environment="ETCD_IMAGE=mcr.microsoft.com/oss/v2/etcd-io/etcd:v3.5.22"`, cidr))
+            Environment="ETCD_IMAGE_URL=mcr.microsoft.com/oss/v2/etcd-io/etcd"`, cidr))
 }
 
 func init() {
