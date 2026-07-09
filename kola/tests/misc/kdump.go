@@ -3,7 +3,6 @@
 package misc
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -11,8 +10,6 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
-	"github.com/flatcar/mantle/platform"
-	"github.com/flatcar/mantle/platform/conf"
 )
 
 func init() {
@@ -26,62 +23,10 @@ func init() {
 		Name:        "acl.kdump",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion: semver.Version{Major: 3},
-		// Temporarily disabled on ACL (bug 22249): when the machine does not come
-		// back after the crash dump, the test only fails once the global kola
-		// timeout elapses (~1h), so retries push the whole run past its timeout.
-		// Drop ExcludeDistros once the post-crash wait has a bounded timeout.
-		Distros:        []string{"acl"},
-		ExcludeDistros: []string{"acl"},
-		Platforms:      []string{"qemu", "qemu-unpriv", "azure"},
-		UserData: conf.Butane(`---
-version: 1.0.0
-variant: flatcar
-storage:
-  files:
-    - path: /opt/acl-activate-kdump
-      mode: 0755
-      contents:
-        inline: |
-          #!/bin/bash
-          set -euo pipefail
-          TEMPLATE="/boot/acl/uki-addons/kdump.addon.efi"
-          # Discover the UKI name to find the correct .extra.d directory
-          UKI_NAME="acl.efi"
-          UKI_CANDIDATES=(/boot/EFI/Linux/vmlinuz-*.efi)
-          if [[ -e "${UKI_CANDIDATES[0]}" ]]; then
-            UKI_NAME=$(basename "${UKI_CANDIDATES[0]}")
-          fi
-          ADDON_DIR="/boot/EFI/Linux/${UKI_NAME}.extra.d"
-          if [[ -f "${TEMPLATE}" ]] && [[ ! -f "${ADDON_DIR}/kdump.addon.efi" ]]; then
-            mkdir -p "${ADDON_DIR}"
-            cp "${TEMPLATE}" "${ADDON_DIR}/kdump.addon.efi"
-            sync
-            systemctl reboot --force
-          else
-            echo "kdump addon activation skipped: template=${TEMPLATE} exists=$(test -f "${TEMPLATE}" && echo y || echo n), addon already present=$(test -f "${ADDON_DIR}/kdump.addon.efi" && echo y || echo n)" >&2
-            exit 1
-          fi
-systemd:
-  units:
-    - name: acl-activate-kdump.service
-      enabled: true
-      contents: |
-        [Unit]
-        Description=Activate kdump addon for UKI (one-shot on first boot)
-        DefaultDependencies=no
-        After=local-fs.target
-        Before=basic.target
-        RequiresMountsFor=/boot
-        ConditionKernelCommandLine=!crashkernel
-
-        [Service]
-        Type=oneshot
-        ExecStart=/opt/acl-activate-kdump
-
-        [Install]
-        WantedBy=sysinit.target`),
+		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion:  semver.Version{Major: 3},
+		Distros:     []string{"acl"},
+		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
 	})
 
 	// GRUB boot mode: crashkernel= is delivered via the OEM grub.cfg(linux_append variable).
@@ -92,12 +37,10 @@ systemd:
 		Name:        "acl.kdump.grub",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion: semver.Version{Major: 3},
-		// Temporarily disabled on ACL (bug 22249): see acl.kdump above.
-		Distros:        []string{"acl"},
-		ExcludeDistros: []string{"acl"},
-		Platforms:      []string{"qemu", "qemu-unpriv"},
+		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion:  semver.Version{Major: 3},
+		Distros:     []string{"acl"},
+		Platforms:   []string{"qemu", "qemu-unpriv"},
 	})
 }
 
@@ -118,6 +61,27 @@ func kdumpUKITest(c cluster.TestCluster) {
 
 	// UKI test requires the addon template on the ESP (vfat is mounted umask=0077, needs root)
 	c.MustSSH(m, "sudo test -f /boot/acl/uki-addons/kdump.addon.efi")
+
+	// Activate the kdump addon: copy it into the UKI .extra.d directory.
+	// This is done via SSH (kola-managed) rather than a systemd service to
+	// avoid an unmanaged reboot that races with kola's startup SSH check.
+	c.MustSSH(m, `sudo bash -c '
+		set -euo pipefail
+		TEMPLATE="/boot/acl/uki-addons/kdump.addon.efi"
+		UKI_NAME="acl.efi"
+		UKI_CANDIDATES=(/boot/EFI/Linux/vmlinuz-*.efi)
+		if [[ -e "${UKI_CANDIDATES[0]}" ]]; then
+			UKI_NAME=$(basename "${UKI_CANDIDATES[0]}")
+		fi
+		ADDON_DIR="/boot/EFI/Linux/${UKI_NAME}.extra.d"
+		mkdir -p "${ADDON_DIR}"
+		cp "${TEMPLATE}" "${ADDON_DIR}/kdump.addon.efi"
+		sync
+	'`)
+	c.Logf("kdump addon activated, rebooting to pick up crashkernel= cmdline")
+	if err := m.Reboot(); err != nil {
+		c.Fatalf("Failed to reboot after kdump addon activation: %v", err)
+	}
 
 	kdumpVerifyAndCrash(c)
 }
@@ -147,6 +111,7 @@ func kdumpGRUBTest(c cluster.TestCluster) {
 	}
 	// Read existing linux_append (if any), append crashkernel, rewrite.
 	c.MustSSH(m, fmt.Sprintf(`sudo bash -c '
+		set -euo pipefail
 		existing=""
 		if [ -f /oem/grub.cfg ]; then
 			existing=$(sed -n "s/^set linux_append=\"\([^\"]*\)\".*/\1/p" /oem/grub.cfg | head -n 1)
@@ -194,14 +159,33 @@ func kdumpVerifyAndCrash(c cluster.TestCluster) {
 
 	// Wait for the machine to come back after crash dump + reboot.
 	// The full cycle (panic -> kexec -> capture vmcore -> reboot -> network up)
-	// takes ~30s on amd64/QEMU but several minutes on aarch64.
-	// Give time for the dump to complete before checking SSH.
+	// typically takes 2-3 min on amd64 qemu or Azure native HW.
+	// aarch64 qemu (TCG emulation) can take significantly longer and is
+	// excluded via kola_enforcing.yaml in the ACL repo.
+	//
+	// NOTE: we use c.SSH(m, "true") instead of platform.CheckMachine because
+	// CheckMachine has an internal 60-retry loop (SSHRetries × SSHTimeout ≈ 10 min)
+	// backed by a TCP RetryDialer (7 × 5s = 35s per attempt) that ignores context
+	// cancellation. A single CheckMachine call can block for up to ~45 min,
+	// defeating our deadline. A bare c.SSH blocks at most ~35s per attempt.
 	c.Logf("Waiting for VM to complete crash dump and reboot...")
-	time.Sleep(30 * time.Second)
-
-	// CheckMachine already retries SSH (SSHRetries x SSHTimeout approx= 10 min).
-	if err := platform.CheckMachine(context.TODO(), m); err != nil {
-		c.Fatalf("Machine did not come back after crash: %v", err)
+	start := time.Now()
+	// Give the capture kernel time to write the vmcore and reboot before
+	// starting SSH probes. Probing too early just wastes ~35s per attempt
+	// on TCP dial timeouts against an unreachable machine.
+	time.Sleep(2 * time.Minute)
+	var reconnected bool
+	var lastErr error
+	deadline := start.Add(10 * time.Minute)
+	for time.Now().Before(deadline) {
+		time.Sleep(15 * time.Second)
+		if _, lastErr = c.SSH(m, "true"); lastErr == nil {
+			reconnected = true
+			break
+		}
+	}
+	if !reconnected {
+		c.Fatalf("Machine did not come back after crash (waited %v): %v", time.Since(start).Round(time.Second), lastErr)
 	}
 	c.Logf("VM back after crash dump + reboot")
 
