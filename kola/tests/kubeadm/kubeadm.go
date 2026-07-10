@@ -350,6 +350,16 @@ func setup(c cluster.TestCluster, params map[string]interface{}) (platform.Machi
 		return nil, fmt.Errorf("unable to create etcd node: %w", err)
 	}
 
+	etcdIPCorrected, err := correctAzurePrivateIP(c, etcdNode)
+	if err != nil {
+		return nil, fmt.Errorf("unable to configure Azure etcd node private IP: %w", err)
+	}
+	if etcdIPCorrected {
+		if _, stderr, err := etcdNode.SSH("sudo systemctl restart etcd-member.service"); err != nil {
+			return nil, fmt.Errorf("unable to restart etcd after correcting its Azure private IP: %w: %s", err, stderr)
+		}
+	}
+
 	v := string(c.MustSSH(etcdNode, `set -euo pipefail; grep -m 1 "^VERSION=" /usr/lib/os-release | cut -d = -f 2`))
 	if v == "" {
 		c.Fatalf("Assertion for version string failed")
@@ -452,10 +462,50 @@ func setup(c cluster.TestCluster, params map[string]interface{}) (platform.Machi
 		}
 	}
 
+	if _, err := correctAzurePrivateIP(c, worker); err != nil {
+		return nil, fmt.Errorf("unable to configure Azure worker node private IP: %w", err)
+	}
+
 	out, err = c.SSH(worker, "sudo /home/core/install.sh")
 	if err != nil {
 		return nil, fmt.Errorf("unable to run worker script: %w", err)
 	}
 
 	return master, nil
+}
+
+func correctAzurePrivateIP(c cluster.TestCluster, machine platform.Machine) (bool, error) {
+	if c.Platform() != "azure" {
+		return false, nil
+	}
+
+	privateIP := machine.PrivateIP()
+	// Verify Azure's NIC address matches the guest's primary route before overriding bad metadata.
+	command := fmt.Sprintf(`set -euo pipefail
+private_ip=%q
+guest_ip="$(ip -4 -o route get 168.63.129.16 | sed -n 's/.* src \([^ ]*\).*/\1/p' | head -n 1)"
+if [[ -z "${guest_ip}" ]]; then
+	echo "Unable to determine the guest primary IPv4 address" >&2
+	exit 1
+fi
+if [[ "${guest_ip}" != "${private_ip}" ]]; then
+	echo "Azure NIC private IP ${private_ip} does not match guest primary IP ${guest_ip}" >&2
+	exit 1
+fi
+sudo systemctl start --quiet coreos-metadata.service
+current="$(sed -n 's/^COREOS_AZURE_IPV4_DYNAMIC=//p' /run/metadata/flatcar)"
+if [[ "${current}" != "${private_ip}" ]]; then
+	echo "Correcting Azure metadata private IP from ${current} to ${private_ip}"
+	sudo cp -a /run/metadata/flatcar /run/metadata/flatcar.wireserver
+	sudo sed -i "s/^COREOS_AZURE_IPV4_DYNAMIC=.*/COREOS_AZURE_IPV4_DYNAMIC=${private_ip}/" /run/metadata/flatcar
+fi`, privateIP)
+	stdout, stderr, err := machine.SSH(command)
+	if err != nil {
+		return false, fmt.Errorf("unable to correct Azure private IP: %w: %s", err, stderr)
+	}
+	message := strings.TrimSpace(string(stdout))
+	if message != "" {
+		plog.Infof("%s", message)
+	}
+	return message != "", nil
 }
