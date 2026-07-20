@@ -133,9 +133,9 @@ func kdumpGRUBTest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	// GRUB test only - fail on UKI-booted images
+	// GRUB test only - skip on UKI-booted images
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
-		c.Fatalf("GRUB kdump test running on a UKI-booted image")
+		c.Skipf("GRUB kdump test not applicable on UKI-booted image")
 	}
 
 	// Append crashkernel= to OEM grub.cfg (preserving existing console= etc.)
