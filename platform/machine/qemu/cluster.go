@@ -111,11 +111,23 @@ ExecStartPost=/usr/bin/ln -fs /run/metadata/flatcar /run/metadata/coreos
 # Reduce the number of udev workers to mitigate resource contention on slow qemu emulation
 children_max=4
 `, 0644)
+			userConf.AddFile("/etc/systemd/system.conf.d/10-device-timeout.conf", "root", `# This file is specific for arm64-usr qemu tests
+# Slow full-system emulation makes device/verity/getty setup exceed systemd's default
+# device timeout; raise it so units do not fail into an emergency shell.
+[Manager]
+DefaultDeviceTimeoutSec=120
+`, 0644)
 		} else {
 			// For cloud-config based tests, create a new ignition config file
 			armUserConf.AddFile("/etc/udev/udev.conf", "root", `# This file is specific for arm64-usr qemu tests
 # Reduce the number of udev workers to mitigate resource contention on slow qemu emulation
 children_max=4
+`, 0644)
+			armUserConf.AddFile("/etc/systemd/system.conf.d/10-device-timeout.conf", "root", `# This file is specific for arm64-usr qemu tests
+# Slow full-system emulation makes device/verity/getty setup exceed systemd's default
+# device timeout; raise it so units do not fail into an emergency shell.
+[Manager]
+DefaultDeviceTimeoutSec=120
 `, 0644)
 		}
 	}
