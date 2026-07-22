@@ -11,7 +11,10 @@ import (
 
 func init() {
 	register.Register(&register.Test{
-		Name:        "cl.ignition.kargs",
+		Name: "cl.ignition.kargs",
+		// ACL uses UKI (systemd-boot); ignition kernel_arguments injection
+		// (grub-based) is not applied on UKI, so restrict this test to CL.
+		Distros:     []string{"cl"},
 		Run:         check,
 		ClusterSize: 1,
 		UserData: conf.Butane(`---
