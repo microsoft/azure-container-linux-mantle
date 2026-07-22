@@ -36,7 +36,9 @@ func init() {
 		NativeFuncs: map[string]func() error{
 			"CgroupMounts": TestCgroup1Mounts,
 		},
-		Distros:    []string{"acl", "cl"},
+		// ACL uses UKI; the cgroup-v1 kernel arg is injected via ignition
+		// (grub-based) which is not applied on UKI, so restrict to CL.
+		Distros:    []string{"cl"},
 		MinVersion: semver.Version{Major: 3033},
 		EndVersion: semver.Version{Major: 4179},
 		// This test is normally not related to the cloud environment

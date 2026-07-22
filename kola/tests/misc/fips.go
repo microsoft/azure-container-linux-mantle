@@ -70,7 +70,13 @@ storage:
           #!/bin/bash
           set -euo pipefail
           TEMPLATE="/boot/acl/uki-addons/fips.addon.efi"
-          ADDON_DIR="/boot/EFI/Linux/acl.efi.extra.d"
+          # Discover the UKI name to find the correct .extra.d directory.
+          UKI_NAME="acl.efi"
+          UKI_CANDIDATES=(/boot/EFI/Linux/vmlinuz-*.efi)
+          if [[ -e "${UKI_CANDIDATES[0]}" ]]; then
+            UKI_NAME=$(basename "${UKI_CANDIDATES[0]}")
+          fi
+          ADDON_DIR="/boot/EFI/Linux/${UKI_NAME}.extra.d"
           if [[ -f "${TEMPLATE}" ]] && [[ ! -f "${ADDON_DIR}/fips.addon.efi" ]]; then
             mkdir -p "${ADDON_DIR}"
             cp "${TEMPLATE}" "${ADDON_DIR}/fips.addon.efi"
@@ -91,7 +97,7 @@ systemd:
         After=local-fs.target
         Before=basic.target
         RequiresMountsFor=/boot
-        ConditionPathExists=!/boot/EFI/Linux/acl.efi.extra.d/fips.addon.efi
+        ConditionKernelCommandLine=!fips
 
         [Service]
         Type=oneshot
