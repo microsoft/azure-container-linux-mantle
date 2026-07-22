@@ -26,10 +26,10 @@ func init() {
 		Name:        "acl.kdump",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion: semver.Version{Major: 3},
-		Distros:    []string{"acl"},
-		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
+		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion:  semver.Version{Major: 3},
+		Distros:     []string{"acl"},
+		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
 		UserData: conf.Butane(`---
 version: 1.0.0
 variant: flatcar
@@ -87,15 +87,10 @@ systemd:
 		Name:        "acl.kdump.grub",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion: semver.Version{Major: 3},
-		// GRUB kdump variant (crashkernel via OEM grub.cfg). ACL is
-		// currently UKI-only, so this skips at runtime on UKI-booted
-		// images (see kdumpGRUBTest); it stays acl-scoped and acl-named
-		// so it runs automatically if a GRUB-booted ACL image is ever
-		// reintroduced. The UKI kdump path is covered by acl.kdump.
-		Distros:   []string{"acl"},
-		Platforms: []string{"qemu", "qemu-unpriv"},
+		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion:  semver.Version{Major: 3},
+		Distros:     []string{"acl"},
+		Platforms:   []string{"qemu", "qemu-unpriv"},
 	})
 }
 
@@ -131,9 +126,7 @@ func kdumpGRUBTest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	// GRUB test only - skip on UKI-booted images. ACL is currently UKI-only,
-	// so this ordinarily skips; it runs only if a GRUB-booted ACL image
-	// exists. The UKI kdump path is covered by acl.kdump.
+	// GRUB test only - skip on UKI-booted images
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
 		c.Skip("GRUB kdump variant not applicable on a UKI-booted image (see acl.kdump)")
 	}
