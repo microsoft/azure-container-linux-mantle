@@ -26,10 +26,10 @@ func init() {
 		Name:        "acl.kdump",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion:  semver.Version{Major: 3},
-		Distros:     []string{"acl"},
-		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
+		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion: semver.Version{Major: 3},
+		Distros:    []string{"acl"},
+		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
 		UserData: conf.Butane(`---
 version: 1.0.0
 variant: flatcar
@@ -87,10 +87,13 @@ systemd:
 		Name:        "acl.kdump.grub",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion:  semver.Version{Major: 3},
-		Distros:     []string{"acl"},
-		Platforms:   []string{"qemu", "qemu-unpriv"},
+		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion: semver.Version{Major: 3},
+		// ACL is UKI-only; the GRUB kdump variant (crashkernel via OEM
+		// grub.cfg) is not applicable on UKI. Gate to the grub-booted CL
+		// distro so it is skipped on ACL runs. UKI kdump is acl.kdump.
+		Distros:   []string{"cl"},
+		Platforms: []string{"qemu", "qemu-unpriv"},
 	})
 }
 
