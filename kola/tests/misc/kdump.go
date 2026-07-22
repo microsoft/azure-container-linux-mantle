@@ -89,10 +89,12 @@ systemd:
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
 		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
 		MinVersion: semver.Version{Major: 3},
-		// ACL is UKI-only; the GRUB kdump variant (crashkernel via OEM
-		// grub.cfg) is not applicable on UKI. Gate to the grub-booted CL
-		// distro so it is skipped on ACL runs. UKI kdump is acl.kdump.
-		Distros:   []string{"cl"},
+		// GRUB kdump variant (crashkernel via OEM grub.cfg). ACL is
+		// currently UKI-only, so this skips at runtime on UKI-booted
+		// images (see kdumpGRUBTest); it stays acl-scoped and acl-named
+		// so it runs automatically if a GRUB-booted ACL image is ever
+		// reintroduced. The UKI kdump path is covered by acl.kdump.
+		Distros:   []string{"acl"},
 		Platforms: []string{"qemu", "qemu-unpriv"},
 	})
 }
@@ -129,9 +131,11 @@ func kdumpGRUBTest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	// GRUB test only - fail on UKI-booted images
+	// GRUB test only - skip on UKI-booted images. ACL is currently UKI-only,
+	// so this ordinarily skips; it runs only if a GRUB-booted ACL image
+	// exists. The UKI kdump path is covered by acl.kdump.
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
-		c.Fatalf("GRUB kdump test running on a UKI-booted image")
+		c.Skip("GRUB kdump variant not applicable on a UKI-booted image (see acl.kdump)")
 	}
 
 	// Append crashkernel= to OEM grub.cfg (preserving existing console= etc.)
