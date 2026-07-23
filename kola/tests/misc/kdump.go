@@ -104,10 +104,7 @@ func kdumpUKITest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	// UKI test only - both acl.kdump and acl.kdump.grub are scheduled on
-	// every ACL run (Distros: ["acl"]), so hitting a GRUB image here is the
-	// routine/expected outcome on a GRUB run, not a scheduling error. Skip
-	// rather than Fatalf so ACL-GRUB kola runs aren't permanently red.
+	// UKI test only - skip on GRUB-booted images
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err != nil {
 		c.Skip("acl.kdump (UKI variant) not applicable on a GRUB-booted image (see acl.kdump.grub)")
 	}
