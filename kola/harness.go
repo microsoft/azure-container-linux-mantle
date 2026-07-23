@@ -212,9 +212,16 @@ var (
 			skipIfMatch: regexp.MustCompile(`blk_update_request: I/O error, dev sr0, sector \d+|Buffer I/O error on (device|dev) sr0, logical block \d+`),
 		},
 		{
-			desc:     "systemd unit failed to start",
-			match:    regexp.MustCompile("Failed to start (.*)"),
-			skipFlag: &[]register.Flag{register.NoEmergencyShellCheck}[0],
+			desc:        "systemd unit failed to start",
+			match:       regexp.MustCompile("Failed to start (.*)"),
+			skipIfMatch: regexp.MustCompile("Failed to start (.*verity.*)"),
+			skipFlag:    &[]register.Flag{register.NoEmergencyShellCheck}[0],
+			perLine:     true,
+		},
+		{
+			desc:     "systemd unit related to verity failed to start",
+			match:    regexp.MustCompile("Failed to start (.*verity.*)"),
+			skipFlag: &[]register.Flag{register.NoVerityCorruptionCheck}[0],
 		},
 		{
 			desc:        "systemd dependency unit failed to start",
