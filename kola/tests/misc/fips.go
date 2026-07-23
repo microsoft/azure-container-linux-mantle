@@ -136,8 +136,12 @@ storage:
 func fipsUKITest(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
+	// Both acl.misc.fips and acl.misc.fips.grub are scheduled on every ACL
+	// run (Distros: ["acl"]), so hitting a GRUB image here is the routine
+	// outcome on a GRUB run, not a scheduling error. Skip rather than
+	// Fatalf so ACL-GRUB kola runs aren't permanently red.
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err != nil {
-		c.Fatalf("acl.misc.fips (UKI variant) running on a GRUB-booted image")
+		c.Skip("acl.misc.fips (UKI variant) not applicable on a GRUB-booted image (see acl.misc.fips.grub)")
 	}
 
 	fipsTest(c)
