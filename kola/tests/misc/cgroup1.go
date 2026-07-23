@@ -36,9 +36,6 @@ func init() {
 		NativeFuncs: map[string]func() error{
 			"CgroupMounts": TestCgroup1Mounts,
 		},
-		// The cgroup-v1 kernel arg is injected via ignition (grub.cfg-based),
-		// which applies on CL and ACL-GRUB but not ACL-UKI. Keep both
-		// distros registered and self-skip on UKI at runtime below.
 		Distros:    []string{"acl", "cl"},
 		MinVersion: semver.Version{Major: 3033},
 		EndVersion: semver.Version{Major: 4179},
@@ -50,9 +47,6 @@ func init() {
 func CgroupV1Test(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
-	// UKI-booted images have no grub.cfg for ignition to inject the
-	// cgroup-v1 karg into; skip here rather than gating on Distros so
-	// ACL-GRUB still gets coverage.
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
 		c.Skip("cgroup-v1 karg injection is grub.cfg-based; not applicable on a UKI-booted image")
 	}
