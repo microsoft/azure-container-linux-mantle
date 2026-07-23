@@ -26,10 +26,10 @@ func init() {
 		Name:        "acl.kdump",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion:  semver.Version{Major: 3},
-		Distros:     []string{"acl"},
-		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
+		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion: semver.Version{Major: 3},
+		Distros:    []string{"acl"},
+		Platforms:  []string{"qemu", "qemu-unpriv", "azure"},
 		UserData: conf.Butane(`---
 version: 1.0.0
 variant: flatcar
@@ -87,10 +87,10 @@ systemd:
 		Name:        "acl.kdump.grub",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion:  semver.Version{Major: 3},
-		Distros:     []string{"acl"},
-		Platforms:   []string{"qemu", "qemu-unpriv"},
+		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion: semver.Version{Major: 3},
+		Distros:    []string{"acl"},
+		Platforms:  []string{"qemu", "qemu-unpriv"},
 	})
 }
 
@@ -104,9 +104,12 @@ func kdumpUKITest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	// UKI test only - fail on GRUB-booted images
+	// UKI test only - both acl.kdump and acl.kdump.grub are scheduled on
+	// every ACL run (Distros: ["acl"]), so hitting a GRUB image here is the
+	// routine/expected outcome on a GRUB run, not a scheduling error. Skip
+	// rather than Fatalf so ACL-GRUB kola runs aren't permanently red.
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err != nil {
-		c.Fatalf("UKI kdump test running on a GRUB-booted image")
+		c.Skip("acl.kdump (UKI variant) not applicable on a GRUB-booted image (see acl.kdump.grub)")
 	}
 
 	// UKI test requires the addon template on the ESP (vfat is mounted umask=0077, needs root)
