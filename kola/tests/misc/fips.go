@@ -127,6 +127,7 @@ storage:
 func fipsUKITest(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
+	// UKI test only - skip on GRUB-booted images
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err != nil {
 		c.Skip("acl.misc.fips (UKI variant) not applicable on a GRUB-booted image (see acl.misc.fips.grub)")
 	}
@@ -137,6 +138,7 @@ func fipsUKITest(c cluster.TestCluster) {
 func fipsGRUBTest(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
+	// GRUB test only - skip on UKI-booted images
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
 		c.Skip("acl.misc.fips.grub variant not applicable on a UKI-booted image (see acl.misc.fips)")
 	}
