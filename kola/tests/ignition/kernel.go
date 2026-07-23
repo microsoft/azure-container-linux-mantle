@@ -28,6 +28,7 @@ kernel_arguments:
 func check(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
+	// UKI images have no grub.cfg for ignition to inject kargs into
 	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
 		c.Skip("ignition kernel_arguments injection is grub.cfg-based; not applicable on a UKI-booted image")
 	}
