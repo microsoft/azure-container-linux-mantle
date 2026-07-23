@@ -46,17 +46,17 @@ storage:
           activate = 1`),
 	})
 
+	// UKI variant: ACL ships fips.addon.efi in a backup location but not
+	// activated. Use Ignition to copy it to the active UKI addon dir, create
+	// the /etc/system-fips marker, and reboot so the kernel picks up fips=1.
 	register.Register(&register.Test{
-		Run:         fipsTest,
+		Run:         fipsUKITest,
 		ClusterSize: 1,
 		Name:        `acl.misc.fips`,
 		MinVersion:  semver.Version{Major: 3549},
 		Distros:     []string{"acl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv"},
-		// ACL ships with fips.addon.efi in a backup location but not activated.
-		// Use Ignition to copy it to the active UKI addon dir, create the
-		// /etc/system-fips marker, and reboot so the kernel picks up fips=1.
 		UserData: conf.Butane(`---
 version: 1.0.0
 variant: flatcar
@@ -107,6 +107,53 @@ systemd:
         WantedBy=sysinit.target`),
 	})
 
+	// GRUB variant: ACL-GRUB has no UKI addon mechanism, but it still boots
+	// via grub.cfg and supports ignition kernel_arguments injection like CL,
+	// so fips=1 is delivered the same way as the CL test above.
+	register.Register(&register.Test{
+		Run:         fipsGRUBTest,
+		ClusterSize: 1,
+		Name:        `acl.misc.fips.grub`,
+		MinVersion:  semver.Version{Major: 3549},
+		Distros:     []string{"acl"},
+		// This test is normally not related to the cloud environment
+		Platforms: []string{"qemu", "qemu-unpriv"},
+		UserData: conf.Butane(`---
+version: 1.0.0
+variant: flatcar
+kernel_arguments:
+  should_exist:
+    - fips=1
+storage:
+  files:
+    - path: /etc/system-fips`),
+	})
+}
+
+// fipsUKITest validates FIPS activation on ACL-UKI: fails fast if run
+// against a GRUB-booted image, since that indicates a config/scheduling
+// error (this test's addon-swap+reboot mechanism only applies to UKI).
+func fipsUKITest(c cluster.TestCluster) {
+	m := c.Machines()[0]
+
+	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err != nil {
+		c.Fatalf("acl.misc.fips (UKI variant) running on a GRUB-booted image")
+	}
+
+	fipsTest(c)
+}
+
+// fipsGRUBTest validates FIPS activation on ACL-GRUB via ignition
+// kernel_arguments (fips=1), mirroring the CL test. Self-skips on UKI-booted
+// images (see acl.misc.fips for the UKI variant).
+func fipsGRUBTest(c cluster.TestCluster) {
+	m := c.Machines()[0]
+
+	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
+		c.Skip("acl.misc.fips.grub variant not applicable on a UKI-booted image (see acl.misc.fips)")
+	}
+
+	fipsTest(c)
 }
 
 func fipsTest(c cluster.TestCluster) {
