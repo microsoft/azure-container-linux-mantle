@@ -29,11 +29,11 @@ func init() {
 		// This test is normally not related to the cloud environment
 		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
 		ClusterSize: 1,
-		// Enable an inline dummy unit shipped by Ignition itself, then
-		// verify it reached an active state. This proves the
-		// Ignition -> systemd-preset -> systemd startup chain works
-		// without depending on any distro-shipped service, so the test
-		// runs uniformly on ACL, ACL-T, Flatcar, and FCOS.
+		// Enable an inline dummy unit carried in the Ignition config, then
+		// verify it became active. This proves the Ignition ->
+		// systemd-preset -> systemd startup chain without relying on a
+		// distro-shipped service, so it runs on any distro (ACL, ACL-T,
+		// Flatcar, FCOS).
 		UserData: conf.Ignition(`{
     "ignition": {"version": "2.2.0"},
     "systemd": {

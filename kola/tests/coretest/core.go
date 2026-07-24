@@ -375,11 +375,10 @@ func TestServicesActive() error {
 
 func TestServicesActiveACL() error {
 	allOf := []string{"multi-user.target"}
-	// acl.basic is registered with NeedsDocker, so on stock ACL mantle injects
-	// the docker sysext (which ships docker.socket) before this test runs. On
-	// acl-t no docker sysext exists (moby-containerd RPM only ships containerd/
-	// ctr), so the injection is a no-op and docker.socket is absent. Gate on
-	// the unit file so the check runs when applicable and skips when not.
+	// acl.basic is registered with NeedsDocker: on stock ACL mantle injects
+	// the docker sysext (which ships docker.socket) before this test runs.
+	// acl-t has no docker sysext to inject (moby-containerd RPM ships only
+	// containerd/ctr), so gate the docker.socket check on its unit file.
 	if _, err := os.Stat("/usr/lib/systemd/system/docker.socket"); err == nil {
 		allOf = append(allOf, "docker.socket")
 	} else if !errors.Is(err, os.ErrNotExist) {
