@@ -95,6 +95,7 @@ systemd:
         Before=basic.target
         RequiresMountsFor=/boot
         ConditionKernelCommandLine=!fips
+        ConditionPathExists=/boot/EFI/Linux
 
         [Service]
         Type=oneshot
