@@ -60,8 +60,9 @@ func init() {
 func enableSystemdService(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
-	out := c.MustSSH(m, "systemctl status kola-enable-service-test.service")
-	if strings.Contains(string(out), "inactive") {
-		c.Fatalf("service was not enabled or systemd-presets did not run")
+	out, err := c.SSH(m, "systemctl is-active kola-enable-service-test.service")
+	state := strings.TrimSpace(string(out))
+	if err != nil || state != "active" {
+		c.Fatalf("service was not enabled or systemd-presets did not run: state=%q err=%v", state, err)
 	}
 }
