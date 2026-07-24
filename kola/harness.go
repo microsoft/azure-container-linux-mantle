@@ -224,8 +224,11 @@ var (
 			perLine:     true,
 		},
 		{
-			desc:     "systemd unit related to verity failed to start",
-			match:    regexp.MustCompile("Failed to start (.*verity.*)"),
+			desc: "systemd unit related to verity failed to start",
+			// See comment on the generic "Failed to start" check above:
+			// truncated console output can split "verity" mid-word, so also
+			// match on the surviving "Integrity Protection Setup" tail text.
+			match:    regexp.MustCompile(`Failed to start (.*(verity|Integrity Protection Setup).*)`),
 			skipFlag: &[]register.Flag{register.NoVerityCorruptionCheck}[0],
 		},
 		{
@@ -238,8 +241,11 @@ var (
 			perLine:     true,
 		},
 		{
-			desc:     "systemd dependency unit related to verity failed to start",
-			match:    regexp.MustCompile("Dependency failed for (.*verity.*)"),
+			desc: "systemd dependency unit related to verity failed to start",
+			// See comment on the generic "Dependency failed for" check above:
+			// truncated console output can split "verity" mid-word, so also
+			// match on the surviving "Integrity Protection Setup" tail text.
+			match:    regexp.MustCompile(`Dependency failed for (.*(verity|Integrity Protection Setup).*)`),
 			skipFlag: &[]register.Flag{register.NoVerityCorruptionCheck}[0],
 		},
 		{
