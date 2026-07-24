@@ -11,10 +11,8 @@ import (
 
 func init() {
 	register.Register(&register.Test{
-		Name: "cl.ignition.kargs",
-		// ACL uses UKI (systemd-boot); ignition kernel_arguments injection
-		// (grub-based) is not applied on UKI, so restrict this test to CL.
-		Distros:     []string{"cl"},
+		Name:        "cl.ignition.kargs",
+		Distros:     []string{"acl", "cl"},
 		Run:         check,
 		ClusterSize: 1,
 		UserData: conf.Butane(`---
@@ -29,6 +27,11 @@ kernel_arguments:
 
 func check(c cluster.TestCluster) {
 	m := c.Machines()[0]
+
+	// UKI images have no grub.cfg for ignition to inject kargs into
+	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
+		c.Skip("ignition kernel_arguments injection is grub.cfg-based; not applicable on a UKI-booted image")
+	}
 
 	c.AssertCmdOutputContains(m, "cat /proc/cmdline", " quiet") // assuming space for word separation
 }
