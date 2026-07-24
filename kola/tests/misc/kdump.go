@@ -70,6 +70,7 @@ systemd:
         Before=basic.target
         RequiresMountsFor=/boot
         ConditionKernelCommandLine=!crashkernel
+        ConditionPathExists=/boot/EFI/Linux
 
         [Service]
         Type=oneshot
