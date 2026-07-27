@@ -26,10 +26,15 @@ func init() {
 		Name:        "acl.kdump",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion:  semver.Version{Major: 3},
-		Distros:     []string{"acl"},
-		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
+		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion: semver.Version{Major: 3},
+		// Temporarily disabled on ACL (bug 22249): when the machine does not come
+		// back after the crash dump, the test only fails once the global kola
+		// timeout elapses (~1h), so retries push the whole run past its timeout.
+		// Drop ExcludeDistros once the post-crash wait has a bounded timeout.
+		Distros:        []string{"acl"},
+		ExcludeDistros: []string{"acl"},
+		Platforms:      []string{"qemu", "qemu-unpriv", "azure"},
 		UserData: conf.Butane(`---
 version: 1.0.0
 variant: flatcar
@@ -87,10 +92,12 @@ systemd:
 		Name:        "acl.kdump.grub",
 		// NoKernelPanicCheck: test intentionally triggers a panic.
 		// NoEmergencyShellCheck: post-crash reboot may leave boot.mount dirty in journal.
-		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
-		MinVersion:  semver.Version{Major: 3},
-		Distros:     []string{"acl"},
-		Platforms:   []string{"qemu", "qemu-unpriv"},
+		Flags:      []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
+		MinVersion: semver.Version{Major: 3},
+		// Temporarily disabled on ACL (bug 22249): see acl.kdump above.
+		Distros:        []string{"acl"},
+		ExcludeDistros: []string{"acl"},
+		Platforms:      []string{"qemu", "qemu-unpriv"},
 	})
 }
 
