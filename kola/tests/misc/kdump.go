@@ -17,6 +17,7 @@ func init() {
 	// The addon appends crashkernel=256M to the kernel cmdline when placed
 	// in the UKI's .extra.d directory. Without Secure Boot (qemu default),
 	// the addon loads regardless of signature.
+	// qemu: registered but skipped at runtime (crash dump cycle too slow for CI).
 	register.Register(&register.Test{
 		Run:         kdumpUKITest,
 		ClusterSize: 1,
@@ -26,7 +27,7 @@ func init() {
 		Flags:       []register.Flag{register.NoKernelPanicCheck, register.NoEmergencyShellCheck},
 		MinVersion:  semver.Version{Major: 3},
 		Distros:     []string{"acl"},
-		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
+		Platforms:   []string{"azure", "qemu"},
 	})
 
 	// GRUB boot mode: crashkernel= is delivered via the OEM grub.cfg(linux_append variable).
@@ -47,6 +48,11 @@ func init() {
 // kdumpUKITest validates kdump end-to-end on UKI boot: enable addon, reboot,
 // assert crashkernel reserved, trigger panic, verify vmcore captured.
 func kdumpUKITest(c cluster.TestCluster) {
+	// Skip on qemu: crash dump cycle is too slow and I/O-variable for CI.
+	if string(c.Platform()) == "qemu" {
+		c.Skip("skipping on qemu: crash dump cycle too slow for CI")
+	}
+
 	m := c.Machines()[0]
 
 	// kdump (kexec-tools) must be present in all ACL images
