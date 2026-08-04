@@ -54,7 +54,7 @@ func CISSshd(c cluster.TestCluster) {
 		"disableforwarding yes",
 	} {
 		if !strings.Contains(lower, want) {
-			c.Fatalf("sshd -T missing %q", want)
+			c.Fatalf("sshd -T output missing %q; got:\n%s", want, out)
 		}
 	}
 
@@ -84,7 +84,7 @@ func CISModprobe(c cluster.TestCluster) {
 		"blacklist sctp",
 	} {
 		if !strings.Contains(out, want) {
-			c.Fatalf("cis-blacklist.conf missing %q", want)
+			c.Fatalf("cis-blacklist.conf missing %q; got:\n%s", want, out)
 		}
 	}
 
@@ -102,8 +102,10 @@ func CISLogPerms(c cluster.TestCluster) {
 	}
 
 	// waagent UMask drop-in only exists on Azure OEM (not qemu)
-	out, err := c.SSH(m, "cat /usr/lib/systemd/system/waagent.service.d/cis-umask.conf 2>/dev/null")
-	if err == nil && !strings.Contains(string(out), "UMask=0027") {
-		c.Fatalf("waagent cis-umask.conf missing UMask=0027")
+	if c.Platform() == "azure" {
+		out := string(c.MustSSH(m, "cat /usr/lib/systemd/system/waagent.service.d/cis-umask.conf"))
+		if !strings.Contains(out, "UMask=0027") {
+			c.Fatalf("waagent cis-umask.conf missing UMask=0027; got:\n%s", out)
+		}
 	}
 }
