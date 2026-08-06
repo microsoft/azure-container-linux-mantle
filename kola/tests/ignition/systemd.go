@@ -29,18 +29,24 @@ func init() {
 		// This test is normally not related to the cloud environment
 		Platforms:   []string{"qemu", "qemu-unpriv", "azure"},
 		ClusterSize: 1,
-		// Enable an inline dummy unit carried in the Ignition config, then
-		// verify it became active. This proves the Ignition ->
-		// systemd-preset -> systemd startup chain without relying on a
-		// distro-shipped service, so it runs on any distro (ACL, ACL-T,
-		// Flatcar, FCOS).
+		// enable nfs-server, touch /etc/exports as it doesn't exist by default on Container Linux,
+		// and touch /var/lib/nfs/etab (https://bugzilla.redhat.com/show_bug.cgi?id=1394395) for RHCOS
 		UserData: conf.Ignition(`{
     "ignition": {"version": "2.2.0"},
     "systemd": {
         "units": [{
-            "name": "kola-enable-service-test.service",
-            "enabled": true,
-            "contents": "[Unit]\nDescription=Kola enable-service test\n[Service]\nType=oneshot\nExecStart=/bin/true\nRemainAfterExit=yes\n[Install]\nWantedBy=multi-user.target\n"
+            "name":"nfs-server.service",
+            "enabled":true
+        }]
+    },
+    "storage": {
+        "files": [{
+            "filesystem":"root",
+            "path":"/etc/exports"
+        },
+        {
+            "filesystem":"root",
+            "path":"/var/lib/nfs/etab"
         }]
     }
 }`),
@@ -48,21 +54,32 @@ func init() {
     "ignition": {"version": "3.0.0"},
     "systemd": {
         "units": [{
-            "name": "kola-enable-service-test.service",
-            "enabled": true,
-            "contents": "[Unit]\nDescription=Kola enable-service test\n[Service]\nType=oneshot\nExecStart=/bin/true\nRemainAfterExit=yes\n[Install]\nWantedBy=multi-user.target\n"
+            "name":"nfs-server.service",
+            "enabled":true
+        }]
+    },
+    "storage": {
+        "files": [{
+            "path":"/etc/exports"
+        },
+        {
+            "path":"/var/lib/nfs/etab"
         }]
     }
 }`),
+		// FCOS just ships the client (see
+		// https://github.com/coreos/fedora-coreos-tracker/issues/121).
+		// Should probably just pick a different unit to test with, though
+		// testing the NFS workflow is useful for RHCOS/CL.
+		ExcludeDistros: []string{"fcos"},
 	})
 }
 
 func enableSystemdService(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
-	out, err := c.SSH(m, "systemctl is-active kola-enable-service-test.service")
-	state := strings.TrimSpace(string(out))
-	if err != nil || state != "active" {
-		c.Fatalf("service was not enabled or systemd-presets did not run: state=%q err=%v", state, err)
+	out := c.MustSSH(m, "systemctl status nfs-server.service")
+	if strings.Contains(string(out), "inactive") {
+		c.Fatalf("service was not enabled or systemd-presets did not run")
 	}
 }
