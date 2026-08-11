@@ -133,11 +133,13 @@ func kdumpGRUBTest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	// GRUB test only - skip on UKI-booted images. The probe always exits 0,
-	// so MustSSH fails loudly only on a real SSH failure and the branch is
-	// on output — a transient SSH error cannot be misread as "GRUB boot".
-	bootMode := strings.TrimSpace(string(
-		c.MustSSH(m, "sudo test -d /boot/EFI/Linux && echo uki || echo grub")))
+	// GRUB test only - skip on UKI boots. Probe the current boot mode via
+	// systemd-stub's volatile StubInfo EFI variable, set only when a UKI's stub
+	// launched this boot. The probe always exits 0 and branches on output; on a
+	// misdetection the test runs and fails loudly at the grub.cfg stage instead
+	// of being silently skipped.
+	bootMode := strings.TrimSpace(string(c.MustSSH(m,
+		"sudo test -e /sys/firmware/efi/efivars/StubInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f && echo uki || echo grub")))
 	if bootMode == "uki" {
 		c.Skipf("GRUB kdump test not applicable on UKI-booted image")
 	}

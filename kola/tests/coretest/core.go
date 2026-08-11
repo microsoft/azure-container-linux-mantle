@@ -375,8 +375,8 @@ func TestServicesActive() error {
 func TestServicesActiveACL() error {
 	allOf := []string{"multi-user.target"}
 	// Stock ACL mantle injects the docker sysext before this test runs, so
-	// docker.socket is required unconditionally there. acl-t ships no docker by
-	// design and is identified by Image Customizer's history file, which IC
+	// docker.socket is required unconditionally there. Some ACL builds ship no
+	// docker and are identified by Image Customizer's history file, which IC
 	// writes into every image it customizes. Any stat error counts as "stock
 	// acl" and keeps the stricter check, so an unexpected image fails loudly.
 	if _, err := os.Stat("/usr/share/image-customizer/history.json"); err != nil {
