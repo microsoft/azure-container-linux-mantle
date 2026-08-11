@@ -134,12 +134,13 @@ func kdumpGRUBTest(c cluster.TestCluster) {
 	}
 
 	// GRUB test only - skip on UKI boots. Probe the current boot mode via
-	// systemd-stub's volatile StubInfo EFI variable, set only when a UKI's stub
-	// launched this boot. The probe always exits 0 and branches on output; on a
-	// misdetection the test runs and fails loudly at the grub.cfg stage instead
-	// of being silently skipped.
+	// systemd-stub's volatile StubInfo EFI variable (Boot Loader Interface),
+	// set only when a UKI's stub launched this boot; the vendor GUID suffix is
+	// globbed — the variable name is the semantic part. The probe always exits
+	// 0 and branches on output; on a misdetection the test runs and fails
+	// loudly at the grub.cfg stage instead of being silently skipped.
 	bootMode := strings.TrimSpace(string(c.MustSSH(m,
-		"sudo test -e /sys/firmware/efi/efivars/StubInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f && echo uki || echo grub")))
+		"ls /sys/firmware/efi/efivars/StubInfo-* >/dev/null 2>&1 && echo uki || echo grub")))
 	if bootMode == "uki" {
 		c.Skipf("GRUB kdump test not applicable on UKI-booted image")
 	}
