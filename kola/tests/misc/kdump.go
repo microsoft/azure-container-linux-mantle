@@ -133,9 +133,16 @@ func kdumpGRUBTest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	// GRUB test only - fail on UKI-booted images
-	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
-		c.Fatalf("GRUB kdump test running on a UKI-booted image")
+	// GRUB test only - skip on UKI boots. Probe the current boot mode via
+	// systemd-stub's volatile StubInfo EFI variable (Boot Loader Interface),
+	// set only when a UKI's stub launched this boot; the vendor GUID suffix is
+	// globbed — the variable name is the semantic part. The probe always exits
+	// 0 and branches on output; on a misdetection the test runs and fails
+	// loudly at the grub.cfg stage instead of being silently skipped.
+	bootMode := strings.TrimSpace(string(c.MustSSH(m,
+		"ls /sys/firmware/efi/efivars/StubInfo-* >/dev/null 2>&1 && echo uki || echo grub")))
+	if bootMode == "uki" {
+		c.Skipf("GRUB kdump test not applicable on UKI-booted image")
 	}
 
 	// Append crashkernel= to OEM grub.cfg (preserving existing console= etc.)
