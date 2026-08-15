@@ -7,6 +7,7 @@ import (
 	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
+	"github.com/flatcar/mantle/kola/tests/util"
 	"github.com/flatcar/mantle/platform/conf"
 )
 
@@ -128,8 +129,8 @@ storage:
 func fipsUKITest(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
-	// UKI test only - skip on GRUB-booted images
-	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err != nil {
+	if !util.IsUki(m) {
+		// UKI test only - skip on GRUB-booted images
 		c.Skip("acl.misc.fips (UKI variant) not applicable on a GRUB-booted image (see acl.misc.fips.grub)")
 	}
 
