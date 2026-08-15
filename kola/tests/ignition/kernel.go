@@ -12,7 +12,6 @@ import (
 func init() {
 	register.Register(&register.Test{
 		Name:        "cl.ignition.kargs",
-		Distros:     []string{"acl", "cl"},
 		Run:         check,
 		ClusterSize: 1,
 		UserData: conf.Butane(`---
