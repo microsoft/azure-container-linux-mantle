@@ -11,6 +11,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
+	"github.com/flatcar/mantle/kola/tests/util"
 	"github.com/flatcar/mantle/platform"
 	"github.com/flatcar/mantle/platform/conf"
 )
@@ -112,8 +113,8 @@ func kdumpUKITest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	// UKI test only - fail on GRUB-booted images
-	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err != nil {
+	if !util.IsUki(m) {
+		// UKI test only - fail on GRUB-booted images
 		c.Fatalf("UKI kdump test running on a GRUB-booted image")
 	}
 
