@@ -141,7 +141,7 @@ func fipsGRUBTest(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
 	// GRUB test only - skip on UKI-booted images
-	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
+	if util.IsUki(m) {
 		c.Skip("acl.misc.fips.grub variant not applicable on a UKI-booted image (see acl.misc.fips)")
 	}
 
