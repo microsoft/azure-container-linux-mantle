@@ -6,6 +6,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
+	"github.com/flatcar/mantle/kola/tests/util"
 	"github.com/flatcar/mantle/platform/conf"
 )
 
@@ -28,7 +29,7 @@ func check(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
 	// UKI images have no grub.cfg for ignition to inject kargs into
-	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err == nil {
+	if util.IsUki(m) {
 		c.Skip("ignition kernel_arguments injection is grub.cfg-based; not applicable on a UKI-booted image")
 	}
 
