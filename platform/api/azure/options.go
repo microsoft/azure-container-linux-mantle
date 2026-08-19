@@ -57,6 +57,11 @@ type Options struct {
 	VnetResourceGroup string
 	UseGallery        bool
 	UsePrivateIPs     bool
+	TrustedLaunch     bool
+	// SecureBootCertificateFiles are PEM-encoded certificates to add to the
+	// gallery image version's UEFI db when Mantle creates a Trusted Launch
+	// image from a VHD.
+	SecureBootCertificateFiles []string
 
 	DiskController string
 

@@ -68,9 +68,40 @@ type Network struct {
 	subnet armnetwork.Subnet
 }
 
+func validateTrustedLaunchOptions(opts *Options) error {
+	if len(opts.SecureBootCertificateFiles) > 0 {
+		if !opts.TrustedLaunch {
+			return fmt.Errorf("--azure-secureboot-certificate requires --azure-trusted-launch")
+		}
+		if opts.Options == nil || !opts.EnableSecureboot {
+			return fmt.Errorf("--azure-secureboot-certificate requires --enable-secureboot")
+		}
+		if !opts.UseGallery || (opts.ImageFile == "" && opts.BlobURL == "") {
+			return fmt.Errorf("--azure-secureboot-certificate requires --azure-use-gallery with --azure-image-file or --azure-blob-url")
+		}
+	}
+	if !opts.TrustedLaunch {
+		return nil
+	}
+	if opts.HyperVGeneration != "V2" {
+		return fmt.Errorf("Azure Trusted Launch requires Hyper-V generation V2")
+	}
+	if !opts.UseGallery && (opts.ImageFile != "" || opts.BlobURL != "") {
+		return fmt.Errorf("Azure Trusted Launch with --azure-image-file or --azure-blob-url requires --azure-use-gallery")
+	}
+	if strings.Contains(strings.ToLower(opts.DiskURI), "/providers/microsoft.compute/images/") {
+		return fmt.Errorf("Azure Trusted Launch requires an Azure Compute Gallery image, not a legacy managed image")
+	}
+	return nil
+}
+
 // New creates a new Azure client. If no publish settings file is provided or
 // can't be parsed, an anonymous client is created.
 func New(opts *Options) (*API, error) {
+	if err := validateTrustedLaunchOptions(opts); err != nil {
+		return nil, err
+	}
+
 	var (
 		err    error
 		creds  azcore.TokenCredential
