@@ -17,10 +17,14 @@ package azure
 import (
 	"bufio"
 	"context"
+	"crypto/x509"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -32,9 +36,12 @@ import (
 var galleryImageTemplate []byte
 
 const (
-	deploymentName    = "kolagalleryimage"
-	galleryNamePrefix = "kolaSIG"
-	imageVersion      = "0.0.0"
+	deploymentName                            = "kolagalleryimage"
+	galleryNamePrefix                         = "kolaSIG"
+	imageVersion                              = "0.0.0"
+	gallerySecurityTypeStandard               = "Standard"
+	gallerySecurityTypeTrustedLaunchSupported = "TrustedLaunchSupported"
+	galleryImageVersionResourceType           = "Microsoft.Compute/galleries/images/versions"
 )
 
 type paramValue struct {
@@ -50,6 +57,7 @@ type galleryParams struct {
 	Location            paramValue `json:"location"`
 	Architecture        paramValue `json:"architecture"`
 	HyperVGeneration    paramValue `json:"hyperVGeneration"`
+	SecurityType        paramValue `json:"securityType"`
 }
 
 func azureArchForBoard(board string) string {
@@ -62,6 +70,92 @@ func azureArchForBoard(board string) string {
 	return ""
 }
 
+func gallerySecurityType(trustedLaunch bool) string {
+	if trustedLaunch {
+		return gallerySecurityTypeTrustedLaunchSupported
+	}
+	return gallerySecurityTypeStandard
+}
+
+func loadSecureBootCertificates(paths []string) ([]string, error) {
+	certificates := make([]string, 0, len(paths))
+	seen := make(map[string]struct{})
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read Secure Boot certificate %q: %w", path, err)
+		}
+
+		foundCertificate := false
+		for len(data) > 0 {
+			block, rest := pem.Decode(data)
+			if block == nil {
+				break
+			}
+			data = rest
+			if block.Type != "CERTIFICATE" {
+				continue
+			}
+			if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+				return nil, fmt.Errorf("failed to parse Secure Boot certificate %q: %w", path, err)
+			}
+			foundCertificate = true
+			encoded := base64.StdEncoding.EncodeToString(block.Bytes)
+			if _, ok := seen[encoded]; ok {
+				continue
+			}
+			seen[encoded] = struct{}{}
+			certificates = append(certificates, encoded)
+		}
+		if !foundCertificate {
+			return nil, fmt.Errorf("Secure Boot certificate %q does not contain a PEM-encoded certificate", path)
+		}
+	}
+	return certificates, nil
+}
+
+func configureGallerySecurityProfile(template map[string]interface{}, trustedLaunch bool, certificates []string) error {
+	if !trustedLaunch {
+		return nil
+	}
+
+	resources, ok := template["resources"].([]interface{})
+	if !ok {
+		return fmt.Errorf("gallery template resources are missing or malformed")
+	}
+	for _, rawResource := range resources {
+		resource, ok := rawResource.(map[string]interface{})
+		if !ok || resource["type"] != galleryImageVersionResourceType {
+			continue
+		}
+		properties, ok := resource["properties"].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("gallery image version properties are missing or malformed")
+		}
+
+		uefiSettings := map[string]interface{}{
+			"signatureTemplateNames": []string{
+				string(armcompute.UefiSignatureTemplateNameMicrosoftUefiCertificateAuthorityTemplate),
+			},
+		}
+		if len(certificates) > 0 {
+			uefiSettings["additionalSignatures"] = map[string]interface{}{
+				"db": []interface{}{
+					map[string]interface{}{
+						"type":  string(armcompute.UefiKeyTypeX509),
+						"value": certificates,
+					},
+				},
+			}
+		}
+		properties["securityProfile"] = map[string]interface{}{
+			"uefiSettings": uefiSettings,
+		}
+		return nil
+	}
+	return fmt.Errorf("gallery template is missing image version resource")
+}
+
 // CreateGalleryImage creates an Azure Compute Gallery with 1 image version referencing the blob as the disk
 func (a *API) CreateGalleryImage(name, resourceGroup, storageAccount, blobURI string) (string, error) {
 	plog.Infof("Creating Gallery Image %s", name)
@@ -70,6 +164,13 @@ func (a *API) CreateGalleryImage(name, resourceGroup, storageAccount, blobURI st
 	err := json.Unmarshal(galleryImageTemplate, &template)
 	if err != nil {
 		return "", fmt.Errorf("failed to unmarshal gallery template: %w", err)
+	}
+	certificates, err := loadSecureBootCertificates(a.Opts.SecureBootCertificateFiles)
+	if err != nil {
+		return "", err
+	}
+	if err := configureGallerySecurityProfile(template, a.Opts.TrustedLaunch, certificates); err != nil {
+		return "", fmt.Errorf("failed to configure gallery security profile: %w", err)
 	}
 	galleryParams := galleryParams{
 		GalleriesName:       paramValue{galleryName},
@@ -80,6 +181,7 @@ func (a *API) CreateGalleryImage(name, resourceGroup, storageAccount, blobURI st
 		Location:            paramValue{a.Opts.Location},
 		Architecture:        paramValue{azureArchForBoard(a.Opts.Board)},
 		HyperVGeneration:    paramValue{a.Opts.HyperVGeneration},
+		SecurityType:        paramValue{gallerySecurityType(a.Opts.TrustedLaunch)},
 	}
 	params := make(map[string]interface{})
 	paramsData, err := json.Marshal(&galleryParams)

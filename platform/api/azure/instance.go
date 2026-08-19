@@ -173,6 +173,17 @@ func (a *API) getVMParameters(name, sshkey string, userdata *conf.Conf, ip *armn
 		},
 	}
 
+	if a.Opts.TrustedLaunch {
+		secureBootEnabled := a.Opts.Options != nil && a.Opts.Options.EnableSecureboot
+		vm.Properties.SecurityProfile = &armcompute.SecurityProfile{
+			SecurityType: to.Ptr(armcompute.SecurityTypesTrustedLaunch),
+			UefiSettings: &armcompute.UefiSettings{
+				SecureBootEnabled: to.Ptr(secureBootEnabled),
+				VTpmEnabled:       to.Ptr(true),
+			},
+		}
+	}
+
 	// Configure disk controller if specified
 	switch a.Opts.DiskController {
 	case "nvme":

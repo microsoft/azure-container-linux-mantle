@@ -41,6 +41,14 @@
         "x64",
         "Arm64"
       ]
+    },
+    "securityType": {
+      "type": "string",
+      "defaultValue": "Standard",
+      "allowedValues": [
+        "Standard",
+        "TrustedLaunchSupported"
+      ]
     }
   },
   "resources": [
@@ -84,6 +92,10 @@
           {
             "name": "DiskControllerTypes",
             "value": "NVMe,SCSI"
+          },
+          {
+            "name": "SecurityType",
+            "value": "[parameters('securityType')]"
           }
         ]
       },

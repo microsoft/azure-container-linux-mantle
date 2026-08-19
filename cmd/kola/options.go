@@ -121,11 +121,11 @@ func init() {
 	sv(&kola.AzureOptions.Sku, "azure-sku", "alpha", "Azure image sku/channel (default \"alpha\"")
 	sv(&kola.AzureOptions.Version, "azure-version", "", "Azure image version")
 	sv(&kola.AzureOptions.Location, "azure-location", "westus", "Azure location (default \"westus\"")
-	sv(&kola.AzureOptions.Size, "azure-size", "Standard_DS2_v2", "Azure machine size (default \"Standard_DS2_v2\")")
+	sv(&kola.AzureOptions.Size, "azure-size", "Standard_DS2_v2", "Azure machine size (default \"Standard_DS2_v2\"; must be set explicitly to a compatible Generation 2 size for Trusted Launch)")
 	sv(&kola.AzureOptions.HyperVGeneration, "azure-hyper-v-generation", "V1", "Azure Hyper-V Generation (\"V1\" or \"V2\")")
 	sv(&kola.AzureOptions.VnetSubnetName, "azure-vnet-subnet-name", "", "Use a pre-existing virtual network for created instances. Specify as vnet-name/subnet-name (subnet defaults to 'default'), or as a fully-qualified Azure subnet or virtual-network resource ID. Use --azure-vnet-resource-group to disambiguate a name that exists in multiple resource groups")
 	sv(&kola.AzureOptions.VnetResourceGroup, "azure-vnet-resource-group", "", "Resource group of the pre-existing virtual network named by --azure-vnet-subnet-name / --azure-kola-vnet. Required when the vnet name is not unique across the subscription")
-	bv(&kola.AzureOptions.UseGallery, "azure-use-gallery", false, "Use gallery image instead of managed image")
+	bv(&kola.AzureOptions.UseGallery, "azure-use-gallery", false, "Use gallery image instead of managed image (required for Trusted Launch with VHD inputs)")
 	bv(&kola.AzureOptions.UsePrivateIPs, "azure-use-private-ips", false, "Assume nodes are reachable using private IP addresses")
 	sv(&kola.AzureOptions.DiskController, "azure-disk-controller", "default", "Use a specific disk-controller for storage (default \"default\", also \"nvme\" and \"scsi\")")
 	sv(&kola.AzureOptions.ResourceGroup, "azure-resource-group", "", "Deploy resources in an existing resource group")
@@ -134,6 +134,8 @@ func init() {
 	sv(&kola.AzureOptions.AvailabilitySet, "azure-availability-set", "", "Deploy instances with an existing availibity set")
 	sv(&kola.AzureOptions.KolaVnet, "azure-kola-vnet", "", "Pass the vnet/subnet that kola is being ran from to restrict network access to created storage accounts")
 	sv(&kola.AzureOptions.VMIdentity, "azure-vm-identity", "", "Assign a managed identity to the VM by name (will be looked up for its ID)")
+	bv(&kola.AzureOptions.TrustedLaunch, "azure-trusted-launch", false, "Enable Azure Trusted Launch for VMs (requires --azure-hyper-v-generation=V2 and an explicit compatible --azure-size)")
+	root.PersistentFlags().StringArrayVar(&kola.AzureOptions.SecureBootCertificateFiles, "azure-secureboot-certificate", nil, "PEM certificate to enroll in the Azure gallery image version UEFI db (repeatable; requires Secure Boot, Trusted Launch, and a gallery VHD input)")
 
 	// do-specific options
 	sv(&kola.DOOptions.ConfigPath, "do-config-file", "", "DigitalOcean config file (default \"~/"+auth.DOConfigPath+"\")")
@@ -243,6 +245,27 @@ func init() {
 	sv(&kola.STACKITOptions.ImageId, "stackit-image-id", "", "STACKIT image ID")
 }
 
+func validateSecureBootOptions(platformName string, enableSecureboot, trustedLaunch bool, ovmfVars string) error {
+	switch platformName {
+	case "qemu", "qemu-unpriv":
+		if enableSecureboot && ovmfVars == "" {
+			return fmt.Errorf("secureboot requires OVMF vars file")
+		}
+	case "azure":
+		if enableSecureboot && !trustedLaunch {
+			return fmt.Errorf("--enable-secureboot on Azure requires --azure-trusted-launch")
+		}
+	}
+	return nil
+}
+
+func validateAzureTrustedLaunchSize(platformName, size string, trustedLaunch, sizeExplicit bool) error {
+	if platformName == "azure" && trustedLaunch && (!sizeExplicit || strings.TrimSpace(size) == "") {
+		return fmt.Errorf("--azure-trusted-launch requires explicitly setting --azure-size to a Trusted Launch-compatible VM size")
+	}
+	return nil
+}
+
 // Sync up the command line options if there is dependency
 func syncOptions() error {
 	// sync `Board` option with other cloud provider
@@ -314,8 +337,11 @@ func syncOptions() error {
 	if kola.QEMUOptions.Firmware == "" {
 		kola.QEMUOptions.Firmware = kolaDefaultFirmware[kola.QEMUOptions.Board]
 	}
-	if kola.QEMUOptions.EnableSecureboot && kola.QEMUOptions.OVMFVars == "" {
-		return fmt.Errorf("secureboot requires OVMF vars file")
+	if err := validateSecureBootOptions(kolaPlatform, kola.Options.EnableSecureboot, kola.AzureOptions.TrustedLaunch, kola.QEMUOptions.OVMFVars); err != nil {
+		return err
+	}
+	if err := validateAzureTrustedLaunchSize(kolaPlatform, kola.AzureOptions.Size, kola.AzureOptions.TrustedLaunch, root.PersistentFlags().Changed("azure-size")); err != nil {
+		return err
 	}
 	rgTags, _ := root.PersistentFlags().GetStringArray("azure-resource-group-tag")
 	if len(rgTags) > 0 {
