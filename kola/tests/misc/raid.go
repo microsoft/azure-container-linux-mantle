@@ -68,7 +68,7 @@ const (
       },
       {
         "mount": {
-          "device": "/dev/disk/by-id/virtio-primary-disk-{{ .WastelandPart }}",
+          "device": "/dev/disk/by-partlabel/ROOT",
           "format": "ext4",
           "label": "wasteland",
           "wipeFilesystem": true
@@ -219,23 +219,27 @@ var (
 
 type raidConfig struct {
 	RaidLevel     string
-	WastelandPart string // "part9" for CL (legacy layout), "part5" for ACL (UKI layout)
 	DataPartLabel string // "OEM-CONFIG" for CL (legacy layout) — unused for ACL
 }
 
 // distroLayout holds the partition references that differ between
 // the legacy (CL) and UKI (ACL) disk layouts.
+//
+// The stale ROOT partition that the root-RAID test wipes and relabels
+// ("wasteland") is now referenced by partlabel (/dev/disk/by-partlabel/ROOT)
+// instead of a hardcoded partition number, since both layouts label it
+// "ROOT" and the number has already shifted once (CL: part9 -> part11,
+// ACL: part5 -> part7) as verity hash partitions were added ahead of it.
 type distroLayout struct {
 	prefix            string // test name prefix: "cl" or "acl"
 	distro            string // distro tag for registration
-	wastelandPart     string // partition number suffix for the ROOT partition device
 	dataPartLabel     string // partlabel for the expendable data partition (CL only)
 	dataUseSecondDisk bool   // if true, data RAID uses a secondary disk instead of primary-disk partitions
 }
 
 var distroLayouts = []distroLayout{
-	{"cl", "cl", "part9", "OEM-CONFIG", false}, // legacy disk layout
-	{"acl", "acl", "part5", "", true},           // UKI disk layout
+	{"cl", "cl", "OEM-CONFIG", false}, // legacy disk layout
+	{"acl", "acl", "", true},          // UKI disk layout
 }
 
 func init() {
@@ -247,8 +251,7 @@ func init() {
 
 			// root partition
 			templRoot, err := util.ExecTemplate(IgnitionConfigRootRaid, raidConfig{
-				RaidLevel:     level,
-				WastelandPart: dl.wastelandPart,
+				RaidLevel: level,
 			})
 			if err != nil {
 				fmt.Printf("fail to execute template for %s/%s: %v\n", dl.prefix, level, err)
