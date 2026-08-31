@@ -80,7 +80,7 @@ systemd:
 		UserData: conf.ContainerLinuxConfig(`
 
 etcd:
-  version:                     3.5.0
+  version:                     3.5.16
   listen_client_urls:          http://0.0.0.0:4001,http://0.0.0.0:2379
   advertise_client_urls:       http://{PRIVATE_IPV4}:2379
   listen_peer_urls:            http://0.0.0.0:2380

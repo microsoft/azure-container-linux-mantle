@@ -31,7 +31,7 @@ import (
 
 var (
 	flannel = `etcd:
-  version:                     3.5.0
+  version:                     3.5.16
   discovery:                   $discovery
   listen_client_urls:          http://0.0.0.0:2379
   advertise_client_urls:       http://{PRIVATE_IPV4}:2379
