@@ -25422,6 +25422,52 @@
             "https://www.googleapis.com/auth/cloud-platform",
             "https://www.googleapis.com/auth/compute"
           ]
+        },
+        "testIamPermissions": {
+          "description": "Returns permissions that a caller has on the specified resource.",
+          "flatPath": "projects/{project}/regions/{region}/healthCheckServices/{resource}/testIamPermissions",
+          "httpMethod": "POST",
+          "id": "compute.regionHealthCheckServices.testIamPermissions",
+          "parameterOrder": [
+            "project",
+            "region",
+            "resource"
+          ],
+          "parameters": {
+            "project": {
+              "description": "Project ID for this request.",
+              "location": "path",
+              "pattern": "(?:(?:[-a-z0-9]{1,63}\\.)*(?:[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?):)?(?:[0-9]{1,19}|(?:[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?))",
+              "required": true,
+              "type": "string"
+            },
+            "region": {
+              "description": "The name of the region for this request.",
+              "location": "path",
+              "pattern": "[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?",
+              "required": true,
+              "type": "string"
+            },
+            "resource": {
+              "description": "Name or id of the resource for this request.",
+              "location": "path",
+              "pattern": "[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?|[1-9][0-9]{0,19}",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "path": "projects/{project}/regions/{region}/healthCheckServices/{resource}/testIamPermissions",
+          "request": {
+            "$ref": "TestPermissionsRequest"
+          },
+          "response": {
+            "$ref": "TestPermissionsResponse"
+          },
+          "scopes": [
+            "https://www.googleapis.com/auth/cloud-platform",
+            "https://www.googleapis.com/auth/compute",
+            "https://www.googleapis.com/auth/compute.readonly"
+          ]
         }
       }
     },
@@ -43091,7 +43137,7 @@
       }
     }
   },
-  "revision": "20260113",
+  "revision": "20260122",
   "rootUrl": "https://compute.googleapis.com/",
   "schemas": {
     "AWSV4Signature": {
@@ -48372,6 +48418,21 @@
       },
       "type": "object"
     },
+    "BundledLocalSsds": {
+      "id": "BundledLocalSsds",
+      "properties": {
+        "defaultInterface": {
+          "description": "The default disk interface if the interface is not specified.",
+          "type": "string"
+        },
+        "partitionCount": {
+          "description": "The number of partitions.",
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "CacheInvalidationRule": {
       "id": "CacheInvalidationRule",
       "properties": {
@@ -48685,6 +48746,7 @@
             "GENERAL_PURPOSE_N2",
             "GENERAL_PURPOSE_N2D",
             "GENERAL_PURPOSE_N4",
+            "GENERAL_PURPOSE_N4A",
             "GENERAL_PURPOSE_N4D",
             "GENERAL_PURPOSE_T2D",
             "GRAPHICS_OPTIMIZED",
@@ -48706,6 +48768,7 @@
             "TYPE_UNSPECIFIED"
           ],
           "enumDescriptions": [
+            "",
             "",
             "",
             "",
@@ -52886,7 +52949,7 @@
       "type": "object"
     },
     "FlexibleTimeRange": {
-      "description": "A flexible specification of a time range that has 3 points of\nflexibility: (1) a flexible start time, (2) a flexible end time, (3) a\nflexible duration.\n\nIt is possible to specify a contradictory time range that cannot be matched\nby any Interval. This causes a validation error.",
+      "description": "Specifies a flexible time range with flexible start time and duration.\n\nIt is possible to specify a contradictory time range that cannot be matched\nby any Interval. This causes a validation error.",
       "id": "FlexibleTimeRange",
       "properties": {
         "maxDuration": {
@@ -62087,12 +62150,14 @@
         "behavior": {
           "enum": [
             "BEHAVIOR_UNSPECIFIED",
+            "CHIP_ERROR",
             "PERFORMANCE",
             "SILENT_DATA_CORRUPTION",
             "UNRECOVERABLE_GPU_ERROR"
           ],
           "enumDescriptions": [
             "Public reportable behaviors",
+            "Any GPU or TPU errors or faults where the accelerator becomes unusable",
             "",
             "",
             "Unrecoverable GPU error identified by an XID"
@@ -67385,6 +67450,10 @@
           "pattern": "[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?",
           "type": "string"
         },
+        "params": {
+          "$ref": "MachineImageParams",
+          "description": "Input only. [Input Only] Additional parameters that are passed in the request, but are\nnot persisted in the resource."
+        },
         "satisfiesPzi": {
           "description": "Output only. Reserved for future use.",
           "readOnly": true,
@@ -67616,6 +67685,20 @@
       },
       "type": "object"
     },
+    "MachineImageParams": {
+      "description": "Machine Image parameters",
+      "id": "MachineImageParams",
+      "properties": {
+        "resourceManagerTags": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Input only. Resource manager tags to be bound to the machine image. Tag keys and values\nhave the same definition as resource\nmanager tags. Keys and values can be either in numeric format,\nsuch as `tagKeys/{tag_key_id}` and `tagValues/{tag_value_id}` or in\nnamespaced format such as `{org_id|project_id}/{tag_key_short_name}` and\n`{tag_value_short_name}`. The field is ignored (both PUT \u0026\nPATCH) when empty.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "MachineType": {
       "description": "Represents a Machine Type resource.\n\nYou can use specific machine types for your VM instances based on performance\nand pricing requirements. For more information, readMachine Types.",
       "id": "MachineType",
@@ -67651,6 +67734,10 @@
             "Machines with architecture X86_64"
           ],
           "type": "string"
+        },
+        "bundledLocalSsds": {
+          "$ref": "BundledLocalSsds",
+          "description": "[Output Only] The configuration of bundled local SSD for the machine type."
         },
         "creationTimestamp": {
           "description": "[Output Only] Creation timestamp inRFC3339\ntext format.",
@@ -71145,7 +71232,7 @@
           "type": "string"
         },
         "state": {
-          "description": "Output only. [Output Only] State for the peering, either `ACTIVE` or `INACTIVE`. The\npeering is `ACTIVE` when there's a matching configuration in the peer\nnetwork.",
+          "description": "Output only. [Output Only] State for the peering.",
           "enum": [
             "ACTIVE",
             "INACTIVE"
@@ -82480,6 +82567,18 @@
       "description": "A GroupPlacementPolicy specifies resource placement configuration.\nIt specifies the failure bucket separation",
       "id": "ResourcePolicyGroupPlacementPolicy",
       "properties": {
+        "acceleratorTopologyMode": {
+          "description": "Specifies the connection mode for the accelerator topology. If not\nspecified, the default is AUTO_CONNECT.",
+          "enum": [
+            "AUTO_CONNECT",
+            "PROVISION_ONLY"
+          ],
+          "enumDescriptions": [
+            "The interconnected chips are pre-configured at the time of VM creation.",
+            "The interconnected chips are connected on demand. At the time of VM\ncreation, the chips are not connected."
+          ],
+          "type": "string"
+        },
         "availabilityDomainCount": {
           "description": "The number of availability domains to spread instances across. If two\ninstances are in different availability domain, they are not in the same\nlow latency network.",
           "format": "int32",
@@ -90660,21 +90759,18 @@
       "id": "StoragePoolExapoolProvisionedCapacityGb",
       "properties": {
         "capacityOptimized": {
-          "description": "Output only. Size, in GiB, of provisioned capacity-optimized capacity for this Exapool",
+          "description": "Size, in GiB, of provisioned capacity-optimized capacity for this Exapool",
           "format": "int64",
-          "readOnly": true,
           "type": "string"
         },
         "readOptimized": {
-          "description": "Output only. Size, in GiB, of provisioned read-optimized capacity for this Exapool",
+          "description": "Size, in GiB, of provisioned read-optimized capacity for this Exapool",
           "format": "int64",
-          "readOnly": true,
           "type": "string"
         },
         "writeOptimized": {
-          "description": "Output only. Size, in GiB, of provisioned write-optimized capacity for this Exapool",
+          "description": "Size, in GiB, of provisioned write-optimized capacity for this Exapool",
           "format": "int64",
-          "readOnly": true,
           "type": "string"
         }
       },
@@ -91795,7 +91891,7 @@
       "id": "Subnetwork",
       "properties": {
         "allowSubnetCidrRoutesOverlap": {
-          "description": "Whether this subnetwork's ranges can conflict with existing static routes.\nSetting this to true allows this subnetwork's primary and secondary ranges\nto overlap with (and contain) static routes that have already been\nconfigured on the corresponding network.\n\nFor example if a static route has range 10.1.0.0/16, a subnet\nrange 10.0.0.0/8 could only be created if allow_conflicting_routes=true.\n\nOverlapping is only allowed on subnetwork operations; routes\nwhose ranges conflict with this subnetwork's ranges won't be allowed unless\nroute.allow_conflicting_subnetworks is set to true.\n\nTypically packets destined to IPs within the subnetwork (which may contain\nprivate/sensitive data) are prevented from leaving the virtual network.\nSetting this field to true will disable this feature.\n\nThe default value is false and applies to all existing subnetworks and\nautomatically created subnetworks.\n\nThis field cannot be set to true at resource creation time.",
+          "description": "Whether this subnetwork's ranges can conflict with existing custom routes.\nSetting this to true allows this subnetwork's primary and secondary ranges\nto overlap with (and contain) custom routes that have already been\nconfigured on the corresponding network.\n\nFor example if a static route has range 10.1.0.0/16, a subnet\nrange 10.0.0.0/8 could only be created if allow_conflicting_routes=true.\n\nOverlapping is only allowed on subnetwork operations; routes\nwhose ranges conflict with this subnetwork's ranges won't be allowed unless\nroute.allow_conflicting_subnetworks is set to true.\n\nTypically packets destined to IPs within the subnetwork (which may contain\nprivate/sensitive data) are prevented from leaving the virtual network.\nSetting this field to true will disable this feature.\n\nThe default value is false and applies to all existing subnetworks and\nautomatically created subnetworks.",
           "type": "boolean"
         },
         "creationTimestamp": {
@@ -91945,6 +92041,18 @@
           "description": "The URL of the reserved internal range.",
           "type": "string"
         },
+        "resolveSubnetMask": {
+          "description": "Configures subnet mask resolution for this subnetwork.",
+          "enum": [
+            "ARP_ALL_RANGES",
+            "ARP_PRIMARY_RANGE"
+          ],
+          "enumDescriptions": [
+            "All ranges assigned to the VM NIC will respond to ARP.",
+            "Only the primary range of the VM NIC will respond to ARP."
+          ],
+          "type": "string"
+        },
         "role": {
           "description": "The role of subnetwork. Currently, this field is only used when\npurpose is set to GLOBAL_MANAGED_PROXY orREGIONAL_MANAGED_PROXY. The value can be set toACTIVE or BACKUP. An ACTIVE\nsubnetwork is one that is currently being used for Envoy-based load\nbalancers in a region. A BACKUP subnetwork is one that is\nready to be promoted to ACTIVE or is currently draining.\nThis field can be updated with a patch request.",
           "enum": [
@@ -91958,7 +92066,7 @@
           "type": "string"
         },
         "secondaryIpRanges": {
-          "description": "An array of configurations for secondary IP ranges for VM instances\ncontained in this subnetwork. The primary IP of such VM must belong to the\nprimary ipCidrRange of the subnetwork. The alias IPs may belong to either\nprimary or secondary ranges. This field can be updated with apatch request.",
+          "description": "An array of configurations for secondary IP ranges for VM instances\ncontained in this subnetwork. The primary IP of such VM must belong to the\nprimary ipCidrRange of the subnetwork. The alias IPs may belong to either\nprimary or secondary ranges. This field can be updated with apatch request. Supports both IPv4 and IPv6 ranges.",
           "items": {
             "$ref": "SubnetworkSecondaryRange"
           },
@@ -92421,15 +92529,15 @@
       "id": "SubnetworkSecondaryRange",
       "properties": {
         "ipCidrRange": {
-          "description": "The range of IP addresses belonging to this subnetwork secondary range.\nProvide this property when you create the subnetwork. Ranges must be\nunique and non-overlapping with all primary and secondary IP ranges\nwithin a network. Only IPv4 is supported. The range can be any range\nlisted in theValid\nranges list.",
+          "description": "The range of IP addresses belonging to this subnetwork secondary range.\nProvide this property when you create the subnetwork. Ranges must be\nunique and non-overlapping with all primary and secondary IP ranges\nwithin a network. Both IPv4 and IPv6 ranges are supported. For IPv4,\nthe range can be any range listed in theValid\nranges list.\n\nFor IPv6:\nThe range must have a /64 prefix length.\nThe range must be omitted, for auto-allocation from Google-defined ULA\nIPv6 range.\nFor BYOGUA internal IPv6 secondary range, the range may be specified\nalong with the `ipCollection` field.\nIf an `ipCollection` is specified, the requested ip_cidr_range must lie\nwithin the range of the PDP referenced by the `ipCollection` field for\nallocation.\nIf `ipCollection` field is specified, but ip_cidr_range is not,\nthe range is auto-allocated from the PDP referenced by the `ipCollection`\nfield.",
           "type": "string"
         },
         "rangeName": {
-          "description": "The name associated with this subnetwork secondary range, used when adding\nan alias IP range to a VM instance.\nThe name must be 1-63 characters long, and comply withRFC1035.\nThe name must be unique within the subnetwork.",
+          "description": "The name associated with this subnetwork secondary range, used when adding\nan alias IP/IPv6 range to a VM instance.\nThe name must be 1-63 characters long, and comply withRFC1035.\nThe name must be unique within the subnetwork.",
           "type": "string"
         },
         "reservedInternalRange": {
-          "description": "The URL of the reserved internal range.",
+          "description": "The URL of the reserved internal range. Only IPv4 is supported.",
           "type": "string"
         }
       },
@@ -97607,7 +97715,7 @@
       "id": "UsableSubnetworkSecondaryRange",
       "properties": {
         "ipCidrRange": {
-          "description": "The range of IP addresses belonging to this subnetwork secondary range.",
+          "description": "The range of IP addresses belonging to this subnetwork secondary range.\nCan be Ipv4 or Ipv6 range.",
           "type": "string"
         },
         "rangeName": {
