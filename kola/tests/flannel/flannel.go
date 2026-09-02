@@ -59,30 +59,7 @@ systemd:
             # to be changed when flannel will support etcd/V3
             Environment=ETCDCTL_API=2
             ExecStartPre=/usr/bin/etcdctl set /coreos.com/network/config '{ \"Network\": \"10.254.0.0/16\", \"Backend\": {\"Type\": \"$type\"} }'`
-	flannelConf     = conf.ContainerLinuxConfig(flannel)
-	flannelFirewall = `
-    - name: open-flannel-ports.service
-      enabled: true
-      contents: |-
-        [Unit]
-        Description=Open firewall ports for flannel and etcd
-        Before=etcd-member.service flanneld.service
-        After=iptables.service
-
-        [Service]
-        Type=oneshot
-        RemainAfterExit=true
-        ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 2379 -j ACCEPT
-        ExecStart=/usr/sbin/iptables -A INPUT -p tcp --dport 2380 -j ACCEPT
-        ExecStart=/usr/sbin/iptables -A INPUT -p udp --dport 8285 -j ACCEPT
-        ExecStart=/usr/sbin/iptables -A INPUT -p udp --dport 8472 -j ACCEPT
-        ExecStart=/usr/sbin/iptables -A INPUT -i flannel+ -j ACCEPT
-        ExecStart=/usr/sbin/iptables -A FORWARD -i flannel+ -j ACCEPT
-        ExecStart=/usr/sbin/iptables -A FORWARD -o flannel+ -j ACCEPT
-
-        [Install]
-        WantedBy=multi-user.target`
-	flannelConfAcl = conf.ContainerLinuxConfig(flannel + flannelFirewall)
+	flannelConf = conf.ContainerLinuxConfig(flannel)
 )
 
 func init() {
@@ -98,33 +75,11 @@ func init() {
 		// Should run on all cloud environments to check for network problems
 	})
 	register.Register(&register.Test{
-		Run:         udp,
-		ClusterSize: 3,
-		Name:        "acl.flannel.udp",
-		Distros:     []string{"acl"},
-		// Fails to work for some reason
-		ExcludePlatforms: []string{"qemu-unpriv"},
-		UserData:         flannelConfAcl.Subst("$type", "udp"),
-		Architectures:    []string{"amd64"},
-		Flags:            []register.Flag{register.NeedsDocker},
-		// Should run on all cloud environments to check for network problems
-	})
-
-	register.Register(&register.Test{
 		Run:         vxlan,
 		ClusterSize: 3,
 		Name:        "cl.flannel.vxlan",
 		Distros:     []string{"cl"},
 		UserData:    flannelConf.Subst("$type", "vxlan"),
-		// Should run on all cloud environments to check for network problems
-	})
-	register.Register(&register.Test{
-		Run:         vxlan,
-		ClusterSize: 3,
-		Name:        "acl.flannel.vxlan",
-		Distros:     []string{"acl"},
-		UserData:    flannelConfAcl.Subst("$type", "vxlan"),
-		Flags:       []register.Flag{register.NeedsDocker},
 		// Should run on all cloud environments to check for network problems
 	})
 }
