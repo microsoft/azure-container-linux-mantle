@@ -46,6 +46,16 @@ type extraTest struct {
 	runFunc func(m platform.Machine, p map[string]interface{}, c cluster.TestCluster)
 }
 
+const (
+	aclFlannelVersion        = "v0.25.4"
+	aclFlannelSourceImage    = "docker.io/flannel/flannel:v0.25.4"
+	aclFlannelCNISourceImage = "docker.io/flannel/flannel-cni-plugin:v1.4.1-flannel1"
+	aclFlannelImageIndex     = "sha256:4cb3c3d29a1340cbaf43e2d7ee2de2afa627defeb4b11e65040a80b05bfd94d4"
+	aclFlannelCNIImageIndex  = "sha256:3cf5509497ab6b2cbd08dd756ea304c74c39e15e7e86c142272a4ed1ff7b20fe"
+	aclFlannelImage          = "mcr.microsoft.com/oss/v2/flannel-io/flannel:v0.25.4-1@" + aclFlannelImageIndex
+	aclFlannelCNIImage       = "mcr.microsoft.com/oss/v2/flannel-io/flannel-cni-plugin:v1.4.1-19@" + aclFlannelCNIImageIndex
+)
+
 var (
 	// extraTests can be used to extend the common tests for a given supported CNI.
 	extraTests = map[string][]extraTest{
@@ -124,6 +134,25 @@ etcd:
   advertise_client_urls: http://{PRIVATE_IPV4}:2379
   listen_client_urls: http://0.0.0.0:2379`)
 )
+
+func configureACLFlannelImages(params map[string]interface{}, distribution, arch string) error {
+	if params["CNI"] != "flannel" || distribution != "acl" {
+		return nil
+	}
+
+	if arch != "amd64" && arch != "arm64" {
+		return fmt.Errorf("unsupported architecture %q for ACL Flannel images", arch)
+	}
+
+	params["FlannelVersion"] = aclFlannelVersion
+	params["FlannelSourceImage"] = aclFlannelSourceImage
+	params["FlannelCNISourceImage"] = aclFlannelCNISourceImage
+	params["FlannelImage"] = aclFlannelImage
+	params["FlannelCNIImage"] = aclFlannelCNIImage
+	params["FlannelImageIndex"] = aclFlannelImageIndex
+	params["FlannelCNIImageIndex"] = aclFlannelCNIImageIndex
+	return nil
+}
 
 // etcdConfigAclWithCIDR returns the ACL etcd-node Container Linux Config with
 // an iptables INPUT ACCEPT rule for the given source CIDR, which lets the
@@ -220,7 +249,11 @@ func init() {
 // kubeadmBaseTest asserts that the cluster is up and running
 func kubeadmBaseTest(c cluster.TestCluster, params map[string]interface{}) {
 	params["Platform"] = c.Platform()
-	params["Arch"] = strings.SplitN(kola.QEMUOptions.Board, "-", 2)[0]
+	arch := strings.SplitN(kola.QEMUOptions.Board, "-", 2)[0]
+	params["Arch"] = arch
+	if err := configureACLFlannelImages(params, kola.Options.Distribution, arch); err != nil {
+		c.Fatalf("unable to configure Flannel images: %v", err)
+	}
 	kubectl, err := setup(c, params)
 	if err != nil {
 		c.Fatalf("unable to setup cluster: %v", err)
@@ -242,6 +275,15 @@ func kubeadmBaseTest(c cluster.TestCluster, params map[string]interface{}) {
 			c.Fatalf("nodes are not ready: %v", err)
 		}
 	})
+
+	if _, ok := params["FlannelImage"]; ok {
+		c.Run("flannel images", func(c cluster.TestCluster) {
+			if err := verifyACLFlannelImages(c, kubectl, params); err != nil {
+				c.Fatalf("unable to verify Flannel images: %v", err)
+			}
+		})
+	}
+
 	c.Run("nginx deployment", func(c cluster.TestCluster) {
 		// nginx manifest has been deployed through ignition
 		if _, err := c.SSH(kubectl, "kubectl apply -f nginx.yaml"); err != nil {
@@ -308,6 +350,110 @@ func kubeadmBaseTest(c cluster.TestCluster, params map[string]interface{}) {
 			c.Run(extra.name, func(c cluster.TestCluster) { t(kubectl, params, c) })
 		}
 	}
+}
+
+func verifyACLFlannelImages(c cluster.TestCluster, controller platform.Machine, params map[string]interface{}) error {
+	requiredParams := []string{
+		"FlannelImage",
+		"FlannelCNIImage",
+		"FlannelImageIndex",
+		"FlannelCNIImageIndex",
+	}
+	values := make(map[string]string, len(requiredParams))
+	for _, key := range requiredParams {
+		value, ok := params[key].(string)
+		if !ok || value == "" {
+			return fmt.Errorf("missing required %s parameter", key)
+		}
+		values[key] = value
+	}
+
+	command := fmt.Sprintf(`set -euo pipefail
+expected_flannel_image=%q
+expected_cni_image=%q
+expected_flannel_index=%q
+expected_cni_index=%q
+
+kubectl --namespace kube-flannel rollout status daemonset/kube-flannel-ds --timeout=3m
+daemonset_json="$(kubectl --namespace kube-flannel get daemonset/kube-flannel-ds -o json)"
+
+assert_equal() {
+	local label="$1"
+	local expected="$2"
+	local actual="$3"
+	if [[ "${actual}" != "${expected}" ]]; then
+		echo "${label}: expected ${expected}, got ${actual}" >&2
+		exit 1
+	fi
+}
+
+actual_flannel_image="$(jq -r '.spec.template.spec.containers[] | select(.name == "kube-flannel") | .image' <<<"${daemonset_json}")"
+actual_install_cni_image="$(jq -r '.spec.template.spec.initContainers[] | select(.name == "install-cni") | .image' <<<"${daemonset_json}")"
+actual_cni_image="$(jq -r '.spec.template.spec.initContainers[] | select(.name == "install-cni-plugin") | .image' <<<"${daemonset_json}")"
+assert_equal "kube-flannel image" "${expected_flannel_image}" "${actual_flannel_image}"
+assert_equal "install-cni image" "${expected_flannel_image}" "${actual_install_cni_image}"
+assert_equal "install-cni-plugin image" "${expected_cni_image}" "${actual_cni_image}"
+
+if ! jq -e --arg flannel "${expected_flannel_image}" --arg cni "${expected_cni_image}" '
+  [(.spec.template.spec.containers[]?, .spec.template.spec.initContainers[]?) | .image]
+  | length == 3 and all(. == $flannel or . == $cni)
+' <<<"${daemonset_json}" >/dev/null; then
+	echo "Flannel DaemonSet contains an unexpected or missing image:" >&2
+	jq -r '(.spec.template.spec.containers[]?, .spec.template.spec.initContainers[]?) | "\(.name): \(.image)"' <<<"${daemonset_json}" >&2 || true
+	exit 1
+fi
+
+pods_json="$(kubectl --namespace kube-flannel get pods --selector app=flannel -o json)"
+if ! pod_statuses="$(jq -er '
+  def image_id($statuses; $container; $pod):
+    [$statuses[]? | select(.name == $container) | .imageID]
+    | if length != 1 or .[0] == null or .[0] == "" then
+        error("\($pod): expected exactly one non-empty \($container) imageID")
+      else .[0]
+      end;
+
+  [.items[] | select(.metadata.deletionTimestamp == null)] as $pods
+  | if ($pods | length) == 0 then
+      error("no non-terminating Flannel pods found")
+    else
+      $pods[]
+      | .metadata.name as $pod
+      | [
+          $pod,
+          image_id(.status.containerStatuses; "kube-flannel"; $pod),
+          image_id(.status.initContainerStatuses; "install-cni"; $pod),
+          image_id(.status.initContainerStatuses; "install-cni-plugin"; $pod)
+        ]
+      | @tsv
+    end
+' <<<"${pods_json}")"; then
+	echo "Unable to read complete Flannel image status for every pod" >&2
+	exit 1
+fi
+
+assert_image_id() {
+	local label="$1"
+	local expected_index="$2"
+	local image_id="$3"
+	if [[ "${image_id}" != *"@${expected_index}" ]]; then
+		echo "${label}: expected index ${expected_index}, got ${image_id}" >&2
+		exit 1
+	fi
+}
+
+
+while IFS=$'	' read -r pod flannel_image_id install_cni_image_id cni_image_id; do
+	assert_image_id "${pod}/kube-flannel" "${expected_flannel_index}" "${flannel_image_id}"
+	assert_image_id "${pod}/install-cni" "${expected_flannel_index}" "${install_cni_image_id}"
+	assert_image_id "${pod}/install-cni-plugin" "${expected_cni_index}" "${cni_image_id}"
+done <<<"${pod_statuses}"`,
+		values["FlannelImage"], values["FlannelCNIImage"],
+		values["FlannelImageIndex"], values["FlannelCNIImageIndex"])
+
+	if _, err := c.SSH(controller, command); err != nil {
+		return fmt.Errorf("checking the Flannel DaemonSet: %w", err)
+	}
+	return nil
 }
 
 // render takes care of template rendering

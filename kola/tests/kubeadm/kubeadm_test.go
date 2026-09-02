@@ -58,6 +58,17 @@ func TestRenderTemplate(t *testing.T) {
 			assert.Equal(t, string(script), res.String())
 		}
 	})
+	t.Run("SuccessACLFlannelMasterScript", func(t *testing.T) {
+		params := GetTestMasterScriptRenderParams("flannel")
+		require.NoError(t, configureACLFlannelImages(params, "acl", "amd64"))
+
+		res, err := render(masterScript, params, false)
+		require.NoError(t, err)
+		assert.Contains(t, res.String(), "https://raw.githubusercontent.com/flannel-io/flannel/v0.25.4/Documentation/kube-flannel.yml")
+		assert.Contains(t, res.String(), fmt.Sprintf("replace_flannel_image '%s' '%s' 2", aclFlannelSourceImage, aclFlannelImage))
+		assert.Contains(t, res.String(), fmt.Sprintf("replace_flannel_image '%s' '%s' 1", aclFlannelCNISourceImage, aclFlannelCNIImage))
+		assert.Contains(t, res.String(), "Unexpected Quay image in kube-flannel.yml")
+	})
 	t.Run("SuccessMasterConfig", func(t *testing.T) {
 		for _, arch := range TestArchitectures {
 			res, err := render(masterConfig, GetTestMasterConfigRenderParams(arch), false)
@@ -66,5 +77,44 @@ func TestRenderTemplate(t *testing.T) {
 			require.Nil(t, err)
 			assert.Equal(t, string(script), res.String())
 		}
+	})
+}
+
+func TestConfigureACLFlannelImages(t *testing.T) {
+	t.Run("ACL", func(t *testing.T) {
+		params := GetTestMasterScriptRenderParams("flannel")
+		require.NoError(t, configureACLFlannelImages(params, "acl", "arm64"))
+
+		assert.Equal(t, aclFlannelVersion, params["FlannelVersion"])
+		assert.Equal(t, aclFlannelSourceImage, params["FlannelSourceImage"])
+		assert.Equal(t, aclFlannelCNISourceImage, params["FlannelCNISourceImage"])
+		assert.Equal(t, aclFlannelImage, params["FlannelImage"])
+		assert.Equal(t, aclFlannelCNIImage, params["FlannelCNIImage"])
+		assert.Equal(t, aclFlannelImageIndex, params["FlannelImageIndex"])
+		assert.Equal(t, aclFlannelCNIImageIndex, params["FlannelCNIImageIndex"])
+	})
+
+	t.Run("Flatcar", func(t *testing.T) {
+		params := GetTestMasterScriptRenderParams("flannel")
+		originalVersion := params["FlannelVersion"]
+		require.NoError(t, configureACLFlannelImages(params, "cl", "amd64"))
+
+		assert.Equal(t, originalVersion, params["FlannelVersion"])
+		_, configured := params["FlannelImage"]
+		assert.False(t, configured)
+	})
+
+	t.Run("OtherCNI", func(t *testing.T) {
+		params := GetTestMasterScriptRenderParams("cilium")
+		require.NoError(t, configureACLFlannelImages(params, "acl", "amd64"))
+
+		_, configured := params["FlannelImage"]
+		assert.False(t, configured)
+	})
+
+	t.Run("UnsupportedArchitecture", func(t *testing.T) {
+		params := GetTestMasterScriptRenderParams("flannel")
+		err := configureACLFlannelImages(params, "acl", "s390x")
+		assert.EqualError(t, err, `unsupported architecture "s390x" for ACL Flannel images`)
 	})
 }

@@ -320,6 +320,46 @@ EOF
 {{ end }}
 {{ if eq .CNI "flannel" }}
     curl -sSfL https://raw.githubusercontent.com/flannel-io/flannel/{{ .FlannelVersion }}/Documentation/kube-flannel.yml > kube-flannel.yml
+{{- if .FlannelImage }}
+  replace_flannel_image() {
+    local source_image="$1"
+    local target_image="$2"
+    local expected_count="$3"
+    local actual_count
+    local source_count
+    local temporary_manifest
+
+    actual_count="$(awk -v image="${source_image}" '$1 == "image:" && $2 == image && NF == 2 { count++ } END { print count + 0 }' kube-flannel.yml)"
+    if [[ "${actual_count}" -ne "${expected_count}" ]]; then
+      echo "Expected ${expected_count} occurrences of ${source_image}, found ${actual_count}" >&2
+      exit 1
+    fi
+
+    temporary_manifest="$(mktemp kube-flannel.yml.XXXXXX)"
+    awk -v source="${source_image}" -v target="${target_image}" '
+      $1 == "image:" && $2 == source && NF == 2 {
+        print substr($0, 1, index($0, $1) - 1) "image: " target
+        next
+      }
+      { print }
+    ' kube-flannel.yml > "${temporary_manifest}"
+    mv "${temporary_manifest}" kube-flannel.yml
+
+    source_count="$(awk -v image="${source_image}" '$1 == "image:" && $2 == image && NF == 2 { count++ } END { print count + 0 }' kube-flannel.yml)"
+    actual_count="$(awk -v image="${target_image}" '$1 == "image:" && $2 == image && NF == 2 { count++ } END { print count + 0 }' kube-flannel.yml)"
+    if [[ "${source_count}" -ne 0 || "${actual_count}" -ne "${expected_count}" ]]; then
+      echo "Failed to replace ${source_image} with ${target_image}" >&2
+      exit 1
+    fi
+  }
+
+  replace_flannel_image '{{ .FlannelSourceImage }}' '{{ .FlannelImage }}' 2
+  replace_flannel_image '{{ .FlannelCNISourceImage }}' '{{ .FlannelCNIImage }}' 1
+  if grep -Fq 'quay.io/' kube-flannel.yml; then
+    echo 'Unexpected Quay image in kube-flannel.yml' >&2
+    exit 1
+  fi
+{{- end }}
     sed -i "s#10.244.0.0/16#{{ .PodSubnet }}#" kube-flannel.yml
     kubectl apply -f kube-flannel.yml
 {{ end }}
