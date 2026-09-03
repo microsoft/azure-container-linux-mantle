@@ -12,6 +12,7 @@ import (
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
 	"github.com/flatcar/mantle/kola/tests/coretest"
+	"github.com/flatcar/mantle/kola/tests/util"
 	"github.com/flatcar/mantle/platform/conf"
 )
 
@@ -45,9 +46,16 @@ func init() {
 }
 
 func CgroupV1Test(c cluster.TestCluster) {
+	m := c.Machines()[0]
+
+	// UKI images have no grub.cfg for ignition to inject the cgroup-v1 karg
+	if util.IsUki(m) {
+		c.Skip("cgroup-v1 karg injection is grub.cfg-based; not applicable on a UKI-booted image")
+	}
+
 	tests := c.ListNativeFunctions()
 	for _, name := range tests {
-		c.RunNative(name, c.Machines()[0])
+		c.RunNative(name, m)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/flatcar/mantle/kola"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
+	"github.com/flatcar/mantle/kola/tests/util"
 	"github.com/flatcar/mantle/platform/conf"
 )
 
@@ -47,16 +48,13 @@ storage:
 	})
 
 	register.Register(&register.Test{
-		Run:         fipsTest,
+		Run:         fipsUKITest,
 		ClusterSize: 1,
 		Name:        `acl.misc.fips`,
 		MinVersion:  semver.Version{Major: 3549},
 		Distros:     []string{"acl"},
 		// This test is normally not related to the cloud environment
 		Platforms: []string{"qemu", "qemu-unpriv"},
-		// ACL ships with fips.addon.efi in a backup location but not activated.
-		// Use Ignition to copy it to the active UKI addon dir, create the
-		// /etc/system-fips marker, and reboot so the kernel picks up fips=1.
 		UserData: conf.Butane(`---
 version: 1.0.0
 variant: flatcar
@@ -70,7 +68,13 @@ storage:
           #!/bin/bash
           set -euo pipefail
           TEMPLATE="/boot/acl/uki-addons/fips.addon.efi"
-          ADDON_DIR="/boot/EFI/Linux/acl.efi.extra.d"
+          # Discover the UKI name to find the correct .extra.d directory.
+          UKI_NAME="acl.efi"
+          UKI_CANDIDATES=(/boot/EFI/Linux/vmlinuz-*.efi)
+          if [[ -e "${UKI_CANDIDATES[0]}" ]]; then
+            UKI_NAME=$(basename "${UKI_CANDIDATES[0]}")
+          fi
+          ADDON_DIR="/boot/EFI/Linux/${UKI_NAME}.extra.d"
           if [[ -f "${TEMPLATE}" ]] && [[ ! -f "${ADDON_DIR}/fips.addon.efi" ]]; then
             mkdir -p "${ADDON_DIR}"
             cp "${TEMPLATE}" "${ADDON_DIR}/fips.addon.efi"
@@ -91,7 +95,8 @@ systemd:
         After=local-fs.target
         Before=basic.target
         RequiresMountsFor=/boot
-        ConditionPathExists=!/boot/EFI/Linux/acl.efi.extra.d/fips.addon.efi
+        ConditionKernelCommandLine=!fips
+        ConditionPathExists=/boot/EFI/Linux
 
         [Service]
         Type=oneshot
@@ -101,6 +106,46 @@ systemd:
         WantedBy=sysinit.target`),
 	})
 
+	register.Register(&register.Test{
+		Run:         fipsGRUBTest,
+		ClusterSize: 1,
+		Name:        `acl.misc.fips.grub`,
+		MinVersion:  semver.Version{Major: 3549},
+		Distros:     []string{"acl"},
+		// This test is normally not related to the cloud environment
+		Platforms: []string{"qemu", "qemu-unpriv"},
+		UserData: conf.Butane(`---
+version: 1.0.0
+variant: flatcar
+kernel_arguments:
+  should_exist:
+    - fips=1
+storage:
+  files:
+    - path: /etc/system-fips`),
+	})
+}
+
+func fipsUKITest(c cluster.TestCluster) {
+	m := c.Machines()[0]
+
+	if !util.IsUki(m) {
+		// UKI test only - skip on GRUB-booted images
+		c.Skip("acl.misc.fips (UKI variant) not applicable on a GRUB-booted image (see acl.misc.fips.grub)")
+	}
+
+	fipsTest(c)
+}
+
+func fipsGRUBTest(c cluster.TestCluster) {
+	m := c.Machines()[0]
+
+	// GRUB test only - skip on UKI-booted images
+	if util.IsUki(m) {
+		c.Skip("acl.misc.fips.grub variant not applicable on a UKI-booted image (see acl.misc.fips)")
+	}
+
+	fipsTest(c)
 }
 
 func fipsTest(c cluster.TestCluster) {

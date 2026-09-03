@@ -97,16 +97,14 @@ func VerityVerify(c cluster.TestCluster) {
 	// find /usr dev
 	usrdev := util.GetUsrDeviceNode(c, m)
 
-	// figure out partition size for hash dev offset, fallback to the expected value in case e2size doesn't work
-	var offset []byte
-	if kola.Options.Distribution != "acl" {
-		offset = c.MustSSH(m, "sudo e2size "+usrdev+" || echo "+defaultUsrSize)
+	if kola.Options.Distribution == "acl" {
+		hashdev := util.GetUsrHashDeviceNode(c, m)
+		c.MustSSH(m, fmt.Sprintf("sudo veritysetup verify --verbose %s %s %s", usrdev, hashdev, hash))
 	} else {
-		// ACL doesn't include Seismograph, with e2size
-		offset = c.MustSSH(m, "sudo btrfs inspect-internal dump-super "+usrdev+" | awk '/total_bytes/{print $2; exit}' || echo "+defaultUsrSize)
+		// figure out partition size for hash dev offset, fallback to the expected value in case e2size doesn't work
+		offset := c.MustSSH(m, "sudo e2size "+usrdev+" || echo "+defaultUsrSize)
+		c.MustSSH(m, fmt.Sprintf("sudo veritysetup verify --verbose --hash-offset=%s %s %s %s", offset, usrdev, usrdev, hash))
 	}
-
-	c.MustSSH(m, fmt.Sprintf("sudo veritysetup verify --verbose --hash-offset=%s %s %s %s", offset, usrdev, usrdev, hash))
 }
 
 // VerityCorruption asserts that a machine will fail to read a file from a
