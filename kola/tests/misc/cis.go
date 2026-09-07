@@ -49,9 +49,13 @@ func CISSshd(c cluster.TestCluster) {
 		"denyusers root",
 		"denygroups root",
 		"allowusers *",
-		"allowgroups *",
 		"maxauthtries 4",
 		"disableforwarding yes",
+		"allowtcpforwarding no",
+		"allowagentforwarding no",
+		"allowstreamlocalforwarding no",
+		"x11forwarding no",
+		"permittunnel no",
 	} {
 		if !strings.Contains(lower, want) {
 			c.Fatalf("sshd -T output missing %q; got:\n%s", want, out)
@@ -101,11 +105,31 @@ func CISLogPerms(c cluster.TestCluster) {
 		c.Fatalf("/var/log/azure mode %s, want 750", mode)
 	}
 
-	// waagent UMask drop-in only exists on Azure OEM (not qemu)
-	if c.Platform() == "azure" {
-		out := string(c.MustSSH(m, "cat /usr/lib/systemd/system/waagent.service.d/cis-umask.conf"))
-		if !strings.Contains(out, "UMask=0027") {
-			c.Fatalf("waagent cis-umask.conf missing UMask=0027; got:\n%s", out)
+	// The waagent drop-in only exists on Azure OEM images.
+	if c.Platform() != "azure" {
+		return
+	}
+	out := string(c.MustSSH(m, "cat /usr/lib/systemd/system/waagent.service.d/cis-umask.conf"))
+	if !strings.Contains(out, "UMask=0027") {
+		c.Fatalf("waagent cis-umask.conf missing UMask=0027; got:\n%s", out)
+	}
+
+	// Simulate logs retained across an OS update, then run the pre-start fix.
+	c.MustSSH(m, `sudo install -d -m 0750 /var/log/azure/cis-logperms &&
+		sudo touch /var/log/azure/cis-logperms/world.log /var/log/azure/cis-logperms/private.log &&
+		sudo chmod 0644 /var/log/azure/cis-logperms/world.log &&
+		sudo chmod 0600 /var/log/azure/cis-logperms/private.log &&
+		sudo systemctl restart waagent.service`)
+
+	for path, want := range map[string]string{
+		"/var/log/azure/cis-logperms":             "750",
+		"/var/log/azure/cis-logperms/world.log":   "640",
+		"/var/log/azure/cis-logperms/private.log": "600",
+	} {
+		mode := strings.TrimSpace(string(c.MustSSH(m, fmt.Sprintf("stat -c '%%a' %s", path))))
+		if mode != want {
+			c.Fatalf("%s mode %s, want %s", path, mode, want)
 		}
 	}
+	c.MustSSH(m, "sudo rm -rf /var/log/azure/cis-logperms")
 }
