@@ -69,7 +69,7 @@ func CISSshd(c cluster.TestCluster) {
 		"/etc/ssh/sshd_config.d/50-acl-no-password-auth.conf",
 		"/etc/ssh/sshd_config.d/60-acl-cis-hardening.conf",
 	} {
-		mode := strings.TrimSpace(string(c.MustSSH(m, fmt.Sprintf("stat -c '%%a' %s", f))))
+		mode := strings.TrimSpace(string(c.MustSSH(m, fmt.Sprintf("sudo stat -c '%%a' %s", f))))
 		if mode != "600" {
 			c.Fatalf("%s mode %s, want 600", f, mode)
 		}
@@ -100,7 +100,7 @@ func CISModprobe(c cluster.TestCluster) {
 func CISLogPerms(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
-	mode := strings.TrimSpace(string(c.MustSSH(m, "stat -c '%a' /var/log/azure")))
+	mode := strings.TrimSpace(string(c.MustSSH(m, "sudo stat -c '%a' /var/log/azure")))
 	if mode != "750" {
 		c.Fatalf("/var/log/azure mode %s, want 750", mode)
 	}
@@ -126,7 +126,7 @@ func CISLogPerms(c cluster.TestCluster) {
 		"/var/log/azure/cis-logperms/world.log":   "640",
 		"/var/log/azure/cis-logperms/private.log": "600",
 	} {
-		mode := strings.TrimSpace(string(c.MustSSH(m, fmt.Sprintf("stat -c '%%a' %s", path))))
+		mode := strings.TrimSpace(string(c.MustSSH(m, fmt.Sprintf("sudo stat -c '%%a' %s", path))))
 		if mode != want {
 			c.Fatalf("%s mode %s, want %s", path, mode, want)
 		}
