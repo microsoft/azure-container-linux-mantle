@@ -1,4 +1,4 @@
-// Copyright 2018 CoreOS, Inc.
+// Copyright (c) Microsoft.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
