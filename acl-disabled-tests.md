@@ -12,6 +12,8 @@ Specifically, ACL test suite has been bootstrapped by running the same set of te
 The following tests are currently disabled in ACL:
 |Test Name|Reason|
 |---|---|
+|acl.flannel.udp|Disabled for ACL because its legacy Docker-based Flannel wrapper is being retired to remove its Quay dependency.|
+|acl.flannel.vxlan|Disabled for ACL because its legacy Docker-based Flannel wrapper is being retired to remove its Quay dependency.|
 |cl.locksmith.cluster|A/B update not targeted for GA|
 |cl.locksmith.reboot|A/B update not targeted for GA|
 |cl.omaha.ping|A/B update not targeted for GA|
@@ -36,6 +38,8 @@ The following tests are currently disabled in ACL:
 |cl.ignition.kargs|Enabled for grub boot mode only. ACL UKI (systemd-boot) mode does not yet support dynamic kernel argument injection via addons.|
 |cl.osreset.ignition-rerun|flatcar-reset uses dynamic kernel argument injection, not yet supported.|
 |sysext.custom-oem|Depends on flatcar-reset, which is not currently supported in ACL|
+
+Replacement coverage for the disabled ACL Flannel tests is tracked separately in [WI 23756](https://dev.azure.com/mariner-org/ACL/_workitems/edit/23756) and does not block wrapper removal. The test definitions remain registered but explicitly exclude ACL. Existing kubeadm Flannel tests and the Flatcar-only `cl.flannel.udp` and `cl.flannel.vxlan` tests remain unchanged.
 
 
 ## Modified Tests
