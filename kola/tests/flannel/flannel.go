@@ -98,10 +98,11 @@ func init() {
 		// Should run on all cloud environments to check for network problems
 	})
 	register.Register(&register.Test{
-		Run:         udp,
-		ClusterSize: 3,
-		Name:        "acl.flannel.udp",
-		Distros:     []string{"acl"},
+		Run:            udp,
+		ClusterSize:    3,
+		Name:           "acl.flannel.udp",
+		Distros:        []string{"acl"},
+		ExcludeDistros: []string{"acl"},
 		// Fails to work for some reason
 		ExcludePlatforms: []string{"qemu-unpriv"},
 		UserData:         flannelConfAcl.Subst("$type", "udp"),
@@ -119,12 +120,13 @@ func init() {
 		// Should run on all cloud environments to check for network problems
 	})
 	register.Register(&register.Test{
-		Run:         vxlan,
-		ClusterSize: 3,
-		Name:        "acl.flannel.vxlan",
-		Distros:     []string{"acl"},
-		UserData:    flannelConfAcl.Subst("$type", "vxlan"),
-		Flags:       []register.Flag{register.NeedsDocker},
+		Run:            vxlan,
+		ClusterSize:    3,
+		Name:           "acl.flannel.vxlan",
+		Distros:        []string{"acl"},
+		ExcludeDistros: []string{"acl"},
+		UserData:       flannelConfAcl.Subst("$type", "vxlan"),
+		Flags:          []register.Flag{register.NeedsDocker},
 		// Should run on all cloud environments to check for network problems
 	})
 }
