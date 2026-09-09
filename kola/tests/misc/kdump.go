@@ -48,12 +48,15 @@ storage:
           #!/bin/bash
           set -euo pipefail
           TEMPLATE="/boot/acl/uki-addons/kdump.addon.efi"
-          # Discover the UKI name to find the correct .extra.d directory
-          UKI_NAME="acl.efi"
+          # Discover the UKI name to find the correct .extra.d directory.
+          # Exactly one UKI is expected on the ESP; fail loudly if that
+          # assumption doesn't hold rather than silently picking one.
           UKI_CANDIDATES=(/boot/EFI/Linux/vmlinuz-*.efi)
-          if [[ -e "${UKI_CANDIDATES[0]}" ]]; then
-            UKI_NAME=$(basename "${UKI_CANDIDATES[0]}")
+          if [[ ${#UKI_CANDIDATES[@]} -ne 1 ]]; then
+            echo "Expected exactly 1 UKI on ESP, found ${#UKI_CANDIDATES[@]}: ${UKI_CANDIDATES[*]}" >&2
+            exit 1
           fi
+          UKI_NAME=$(basename "${UKI_CANDIDATES[0]}")
           ADDON_DIR="/boot/EFI/Linux/${UKI_NAME}.extra.d"
           if [[ -f "${TEMPLATE}" ]] && [[ ! -f "${ADDON_DIR}/kdump.addon.efi" ]]; then
             mkdir -p "${ADDON_DIR}"
@@ -76,7 +79,7 @@ systemd:
         Before=basic.target
         RequiresMountsFor=/boot
         ConditionKernelCommandLine=!crashkernel
-        ConditionPathExists=/boot/EFI/Linux
+        ConditionPathExistsGlob=/sys/firmware/efi/efivars/StubInfo-*
 
         [Service]
         Type=oneshot
