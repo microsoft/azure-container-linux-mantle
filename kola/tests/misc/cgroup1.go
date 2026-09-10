@@ -49,7 +49,7 @@ func CgroupV1Test(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
 	// UKI images have no grub.cfg for ignition to inject the cgroup-v1 karg
-	isUki, err := util.IsUki(m)
+	isUki, err := util.IsUKI(m)
 	if err != nil {
 		c.Fatalf("failed to probe boot mode: %v", err)
 	}

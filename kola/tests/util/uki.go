@@ -20,7 +20,7 @@ import (
 	"github.com/flatcar/mantle/platform"
 )
 
-// IsUki detects whether the current boot used a UKI (systemd-stub) rather
+// IsUKI detects whether the current boot used a UKI (systemd-stub) rather
 // than GRUB. It probes systemd-stub's volatile StubInfo EFI variable
 // (Boot Loader Interface), which is only set when a UKI's stub launched the
 // current boot. This reflects the actual boot path, unlike checking for
@@ -28,7 +28,7 @@ import (
 // GRUB boot too (e.g. while UKIs are staged/installed) and would misclassify
 // the boot mode. Returns an error if the probe itself fails (e.g. SSH/
 // machine failure); callers must not treat a probe error as a GRUB boot.
-func IsUki(m platform.Machine) (bool, error) {
+func IsUKI(m platform.Machine) (bool, error) {
 	out, _, err := m.SSH("ls /sys/firmware/efi/efivars/StubInfo-* >/dev/null 2>&1 && echo uki || echo grub")
 	if err != nil {
 		return false, err
