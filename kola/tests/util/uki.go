@@ -26,11 +26,12 @@ import (
 // current boot. This reflects the actual boot path, unlike checking for
 // installed UKI files under /boot/EFI/Linux, which can be populated on a
 // GRUB boot too (e.g. while UKIs are staged/installed) and would misclassify
-// the boot mode.
-func IsUki(m platform.Machine) bool {
+// the boot mode. Returns an error if the probe itself fails (e.g. SSH/
+// machine failure); callers must not treat a probe error as a GRUB boot.
+func IsUki(m platform.Machine) (bool, error) {
 	out, _, err := m.SSH("ls /sys/firmware/efi/efivars/StubInfo-* >/dev/null 2>&1 && echo uki || echo grub")
 	if err != nil {
-		return false
+		return false, err
 	}
-	return strings.TrimSpace(string(out)) == "uki"
+	return strings.TrimSpace(string(out)) == "uki", nil
 }

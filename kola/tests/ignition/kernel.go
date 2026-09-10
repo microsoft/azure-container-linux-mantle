@@ -29,7 +29,11 @@ func check(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
 	// UKI images have no grub.cfg for ignition to inject kargs into
-	if util.IsUki(m) {
+	isUki, err := util.IsUki(m)
+	if err != nil {
+		c.Fatalf("failed to probe boot mode: %v", err)
+	}
+	if isUki {
 		c.Skip("ignition kernel_arguments injection is grub.cfg-based; not applicable on a UKI-booted image")
 	}
 
