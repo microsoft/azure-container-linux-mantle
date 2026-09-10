@@ -219,6 +219,19 @@ RemainAfterExit=true
 [Install]
 WantedBy=multi-user.target`, true)
 
+		// Socket-activated SSH must wait for the login shell and sudoers setup,
+		// not just for its host keys. Order the services, not sshd.socket:
+		// sockets.target precedes basic.target, which this setup unit needs.
+		// Only Ignition installs these dependencies before systemd starts.
+		if conf.IsIgnition() {
+			for _, service := range []string{"sshd.service", "sshd@.service"} {
+				conf.AddSystemdUnitDropin(service, "10-kola-core-setup.conf", `[Unit]
+Requires=kola-core-setup.service
+After=kola-core-setup.service
+`)
+			}
+		}
+
 		// (2) Sudoers file for script/multipart-mime (silently dropped on ign-v2):
 		conf.AddFile("/etc/sudoers.d/kola-core-nopasswd", "root",
 			"core ALL=(ALL) NOPASSWD: ALL\n", 0440)
