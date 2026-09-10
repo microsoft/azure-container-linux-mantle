@@ -71,6 +71,9 @@ storage:
           # Discover the UKI name to find the correct .extra.d directory.
           # Exactly one UKI is expected on the ESP; fail loudly if that
           # assumption doesn't hold rather than silently picking one.
+          # nullglob: an unmatched glob must expand to zero elements, not
+          # the literal pattern string, so the length check below is exact.
+          shopt -s nullglob
           UKI_CANDIDATES=(/boot/EFI/Linux/vmlinuz-*.efi)
           if [[ ${#UKI_CANDIDATES[@]} -ne 1 ]]; then
             echo "Expected exactly 1 UKI on ESP, found ${#UKI_CANDIDATES[@]}: ${UKI_CANDIDATES[*]}" >&2
@@ -132,7 +135,11 @@ storage:
 func fipsUKITest(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
-	if !util.IsUki(m) {
+	isUki, err := util.IsUki(m)
+	if err != nil {
+		c.Fatalf("failed to probe boot mode: %v", err)
+	}
+	if !isUki {
 		// UKI test only - skip on GRUB-booted images
 		c.Skip("acl.misc.fips (UKI variant) not applicable on a GRUB-booted image (see acl.misc.fips.grub)")
 	}
@@ -144,7 +151,11 @@ func fipsGRUBTest(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
 	// GRUB test only - skip on UKI-booted images
-	if util.IsUki(m) {
+	isUki, err := util.IsUki(m)
+	if err != nil {
+		c.Fatalf("failed to probe boot mode: %v", err)
+	}
+	if isUki {
 		c.Skip("acl.misc.fips.grub variant not applicable on a UKI-booted image (see acl.misc.fips)")
 	}
 
