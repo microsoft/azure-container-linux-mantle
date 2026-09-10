@@ -135,7 +135,7 @@ storage:
 func fipsUKITest(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
-	isUki, err := util.IsUki(m)
+	isUki, err := util.IsUKI(m)
 	if err != nil {
 		c.Fatalf("failed to probe boot mode: %v", err)
 	}
@@ -151,7 +151,7 @@ func fipsGRUBTest(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
 	// GRUB test only - skip on UKI-booted images
-	isUki, err := util.IsUki(m)
+	isUki, err := util.IsUKI(m)
 	if err != nil {
 		c.Fatalf("failed to probe boot mode: %v", err)
 	}

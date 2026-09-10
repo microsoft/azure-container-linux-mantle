@@ -29,7 +29,7 @@ func check(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
 	// UKI images have no grub.cfg for ignition to inject kargs into
-	isUki, err := util.IsUki(m)
+	isUki, err := util.IsUKI(m)
 	if err != nil {
 		c.Fatalf("failed to probe boot mode: %v", err)
 	}

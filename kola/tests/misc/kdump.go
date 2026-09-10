@@ -119,7 +119,7 @@ func kdumpUKITest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	isUki, err := util.IsUki(m)
+	isUki, err := util.IsUKI(m)
 	if err != nil {
 		c.Fatalf("failed to probe boot mode: %v", err)
 	}
