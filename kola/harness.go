@@ -113,6 +113,7 @@ var (
 		match       *regexp.Regexp
 		skipIfMatch *regexp.Regexp
 		skipFlag    *register.Flag
+		perLine     bool
 	}{
 		{
 			desc:     "emergency shell",
@@ -211,14 +212,41 @@ var (
 			skipIfMatch: regexp.MustCompile(`blk_update_request: I/O error, dev sr0, sector \d+|Buffer I/O error on (device|dev) sr0, logical block \d+`),
 		},
 		{
-			desc:     "systemd unit failed to start",
-			match:    regexp.MustCompile("Failed to start (.*)"),
-			skipFlag: &[]register.Flag{register.NoEmergencyShellCheck}[0],
+			desc:  "systemd unit failed to start",
+			match: regexp.MustCompile("Failed to start (.*)"),
+			// systemd truncates long unit descriptions on narrow consoles by
+			// eliding the middle with a horizontal ellipsis (U+2026), keeping
+			// the head and tail of the string. That can cut "verity" itself
+			// mid-word (e.g. "systemd-veri…Integrity Protection Setup for usr."),
+			// so also match on "Integrity Protection Setup", the veritysetup
+			// unit Description= text that survives as the preserved tail.
+			skipIfMatch: regexp.MustCompile(`Failed to start (.*(verity|Integrity Protection Setup).*)`),
+			perLine:     true,
 		},
 		{
-			desc:     "systemd dependency unit failed to start",
-			match:    regexp.MustCompile("Dependency failed for (.*)"),
-			skipFlag: &[]register.Flag{register.NoEmergencyShellCheck}[0],
+			desc: "systemd unit related to verity failed to start",
+			// See comment on the generic "Failed to start" check above:
+			// truncated console output can split "verity" mid-word, so also
+			// match on the surviving "Integrity Protection Setup" tail text.
+			match:    regexp.MustCompile(`Failed to start (.*(verity|Integrity Protection Setup).*)`),
+			skipFlag: &[]register.Flag{register.NoVerityCorruptionCheck}[0],
+		},
+		{
+			desc:  "systemd dependency unit failed to start",
+			match: regexp.MustCompile("Dependency failed for (.*)"),
+			// See comment above on the analogous "Failed to start" check:
+			// truncated console output can split "verity" mid-word, so also
+			// match on the surviving "Integrity Protection Setup" tail text.
+			skipIfMatch: regexp.MustCompile(`Dependency failed for (.*(verity|Integrity Protection Setup).*)`),
+			perLine:     true,
+		},
+		{
+			desc: "systemd dependency unit related to verity failed to start",
+			// See comment on the generic "Dependency failed for" check above:
+			// truncated console output can split "verity" mid-word, so also
+			// match on the surviving "Integrity Protection Setup" tail text.
+			match:    regexp.MustCompile(`Dependency failed for (.*(verity|Integrity Protection Setup).*)`),
+			skipFlag: &[]register.Flag{register.NoVerityCorruptionCheck}[0],
 		},
 		{
 			desc:  "systemd default target unit dependencies not met",
@@ -806,6 +834,30 @@ func CheckConsole(output []byte, t *register.Test) []string {
 	var ret []string
 	for _, check := range consoleChecks {
 		if check.skipFlag != nil && t != nil && t.HasFlag(*check.skipFlag) {
+			continue
+		}
+		if check.perLine {
+			// Evaluate line-by-line so skipIfMatch only suppresses the
+			// specific matching line rather than the entire check. This
+			// keeps an unrelated match (e.g. a non-verity dependency
+			// failure) reported even when a skipped line (e.g. a verity
+			// dependency failure) is also present in the output.
+			for _, line := range strings.Split(string(output), "\n") {
+				match := check.match.FindStringSubmatch(line)
+				if match == nil {
+					continue
+				}
+				if check.skipIfMatch != nil && check.skipIfMatch.MatchString(line) {
+					continue
+				}
+				badness := check.desc
+				if len(match) > 1 {
+					// include first subexpression
+					badness += fmt.Sprintf(" (%s)", match[1])
+				}
+				ret = append(ret, badness)
+				break
+			}
 			continue
 		}
 		match := check.match.FindSubmatch(output)
