@@ -5,13 +5,17 @@
 # Golang is installed via tdnf packages
 
 FROM --platform=linux/amd64 mcr.microsoft.com/azurelinux/base/core:3.0 AS builder-amd64
-RUN tdnf install -y golang gcc glibc-devel kernel-headers binutils git ca-certificates
+RUN tdnf install -y golang-1.27.1 gcc glibc-devel kernel-headers binutils git ca-certificates \
+    && GODEBUG=ms_version=1 go version
 # We use dynamic linking when possible to reduce compile time and binary size
 ENV CGO_ENABLED=1
-ENV GOEXPERIMENT=nosystemcrypto
 COPY . /usr/src/mantle
 # Build amd64 binaries (with CGO), then arm64 binaries (CGO_ENABLED=0)
-RUN bash -c 'cd /usr/src/mantle && ./build ; mv bin bin-amd64 ; CGO_ENABLED=0 GOARCH=arm64 ./build ; mv bin bin-arm64'
+RUN cd /usr/src/mantle \
+    && ./build \
+    && mv bin bin-amd64 \
+    && CGO_ENABLED=0 GOARCH=arm64 ./build \
+    && mv bin bin-arm64
 
 FROM mcr.microsoft.com/azurelinux/base/core:3.0
 LABEL base_image="azurelinux:3.0"
