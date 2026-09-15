@@ -8,10 +8,12 @@ FROM --platform=linux/amd64 mcr.microsoft.com/azurelinux/base/core:3.0 AS builde
 RUN tdnf install -y golang gcc glibc-devel kernel-headers binutils git ca-certificates
 # We use dynamic linking when possible to reduce compile time and binary size
 ENV CGO_ENABLED=1
-ENV GOEXPERIMENT=nosystemcrypto
+# Preserve portable crypto for kolet and CGO-disabled cross-builds. This setting
+# is supported since Microsoft Go 1.25.2; nosystemcrypto was removed in 1.27.
+ENV MS_GO_NOSYSTEMCRYPTO=1
 COPY . /usr/src/mantle
 # Build amd64 binaries (with CGO), then arm64 binaries (CGO_ENABLED=0)
-RUN bash -c 'cd /usr/src/mantle && ./build ; mv bin bin-amd64 ; CGO_ENABLED=0 GOARCH=arm64 ./build ; mv bin bin-arm64'
+RUN cd /usr/src/mantle && ./build && mv bin bin-amd64 && CGO_ENABLED=0 GOARCH=arm64 ./build && mv bin bin-arm64
 
 FROM mcr.microsoft.com/azurelinux/base/core:3.0
 LABEL base_image="azurelinux:3.0"
