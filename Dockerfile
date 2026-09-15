@@ -7,11 +7,11 @@ FROM --platform=linux/amd64 docker.io/amd64/golang:1.24-bookworm AS builder-amd6
 ENV CGO_ENABLED=1
 COPY . /usr/src/mantle
 # Build both here because variable builder names (to avoid caching and reusing the wrong one) are only supported with buildkit
-RUN cd /usr/src/mantle \
+RUN bash -euo pipefail -c 'cd /usr/src/mantle \
     && ./build \
     && mv bin bin-amd64 \
     && CGO_ENABLED=0 GOARCH=arm64 ./build \
-    && mv bin bin-arm64
+    && mv bin bin-arm64'
 
 # See comment above about golang:1.24-bookworm why debian:bookworm is set here
 FROM docker.io/library/debian:bookworm

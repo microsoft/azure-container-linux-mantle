@@ -11,11 +11,11 @@ RUN tdnf install -y golang-1.27.1 gcc glibc-devel kernel-headers binutils git ca
 ENV CGO_ENABLED=1
 COPY . /usr/src/mantle
 # Build amd64 binaries (with CGO), then arm64 binaries (CGO_ENABLED=0)
-RUN cd /usr/src/mantle \
+RUN bash -euo pipefail -c 'cd /usr/src/mantle \
     && ./build \
     && mv bin bin-amd64 \
     && CGO_ENABLED=0 GOARCH=arm64 ./build \
-    && mv bin bin-arm64
+    && mv bin bin-arm64'
 
 FROM mcr.microsoft.com/azurelinux/base/core:3.0
 LABEL base_image="azurelinux:3.0"
