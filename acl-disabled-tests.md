@@ -12,6 +12,8 @@ Specifically, ACL test suite has been bootstrapped by running the same set of te
 The following tests are currently disabled in ACL:
 |Test Name|Reason|
 |---|---|
+|acl.flannel.udp|Legacy Docker-based wrapper being retired to remove its Quay dependency.|
+|acl.flannel.vxlan|Legacy Docker-based wrapper being retired to remove its Quay dependency.|
 |cl.locksmith.cluster|A/B update not targeted for GA|
 |cl.locksmith.reboot|A/B update not targeted for GA|
 |cl.omaha.ping|A/B update not targeted for GA|
