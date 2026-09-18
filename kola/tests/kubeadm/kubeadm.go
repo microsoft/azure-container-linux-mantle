@@ -129,6 +129,13 @@ etcd:
 // an iptables INPUT ACCEPT rule for the given source CIDR, which lets the
 // master/worker nodes reach etcd:2379. CIDR is taken from
 // --trusted-source-cidr (default 10.0.0.0/8 in platform.Options).
+//
+// The etcd-member.service drop-in overrides ETCD_IMAGE to pull etcd from MCR
+// (mcr.microsoft.com) instead of quay.io. The ACL image only bakes etcd v3.5.16,
+// so the etcd: version: 3.5.22 override above forces a runtime image pull; that
+// pull fails on the Azure kola pool because egress to quay.io is restricted,
+// which fails etcd health polling and every kubeadm.* test. MCR is reachable
+// from the Azure pool, so pulling v3.5.22 from there makes the etcd node come up.
 func etcdConfigAclWithCIDR(cidr string) *conf.UserData {
 	return conf.ContainerLinuxConfig(fmt.Sprintf(`
 etcd:
@@ -151,7 +158,13 @@ systemd:
         ExecStart=/usr/sbin/iptables -A INPUT -s %s -j ACCEPT
 
         [Install]
-        WantedBy=multi-user.target`, cidr))
+        WantedBy=multi-user.target
+    - name: "etcd-member.service"
+      dropins:
+        - name: "10-mcr-registry.conf"
+          contents: |-
+            [Service]
+            Environment="ETCD_IMAGE=mcr.microsoft.com/oss/v2/etcd-io/etcd:v3.5.22"`, cidr))
 }
 
 func init() {
