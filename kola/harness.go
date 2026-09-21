@@ -222,6 +222,10 @@ var (
 			// unit Description= text that survives as the preserved tail.
 			skipIfMatch: regexp.MustCompile(`Failed to start (.*(verity|Integrity Protection Setup).*)`),
 			perLine:     true,
+			// Preserve the previous behavior of suppressing this generic check
+			// for tests that intentionally trigger emergency-shell-adjacent
+			// unit failures before recovering (e.g. coreos.update.badusr).
+			skipFlag: &[]register.Flag{register.NoEmergencyShellCheck}[0],
 		},
 		{
 			desc: "systemd unit related to verity failed to start",
@@ -239,6 +243,10 @@ var (
 			// match on the surviving "Integrity Protection Setup" tail text.
 			skipIfMatch: regexp.MustCompile(`Dependency failed for (.*(verity|Integrity Protection Setup).*)`),
 			perLine:     true,
+			// Preserve the previous behavior of suppressing this generic check
+			// for tests that intentionally trigger emergency-shell-adjacent
+			// dependency failures before recovering (e.g. coreos.update.badusr).
+			skipFlag: &[]register.Flag{register.NoEmergencyShellCheck}[0],
 		},
 		{
 			desc: "systemd dependency unit related to verity failed to start",
