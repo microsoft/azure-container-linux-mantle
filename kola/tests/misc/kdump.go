@@ -11,6 +11,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/flatcar/mantle/kola/cluster"
 	"github.com/flatcar/mantle/kola/register"
+	"github.com/flatcar/mantle/kola/tests/util"
 	"github.com/flatcar/mantle/platform"
 	"github.com/flatcar/mantle/platform/conf"
 )
@@ -47,12 +48,18 @@ storage:
           #!/bin/bash
           set -euo pipefail
           TEMPLATE="/boot/acl/uki-addons/kdump.addon.efi"
-          # Discover the UKI name to find the correct .extra.d directory
-          UKI_NAME="acl.efi"
+          # Discover the UKI name to find the correct .extra.d directory.
+          # Exactly one UKI is expected on the ESP; fail loudly if that
+          # assumption doesn't hold rather than silently picking one.
+          # nullglob: an unmatched glob must expand to zero elements, not
+          # the literal pattern string, so the length check below is exact.
+          shopt -s nullglob
           UKI_CANDIDATES=(/boot/EFI/Linux/vmlinuz-*.efi)
-          if [[ -e "${UKI_CANDIDATES[0]}" ]]; then
-            UKI_NAME=$(basename "${UKI_CANDIDATES[0]}")
+          if [[ ${#UKI_CANDIDATES[@]} -ne 1 ]]; then
+            echo "Expected exactly 1 UKI on ESP, found ${#UKI_CANDIDATES[@]}: ${UKI_CANDIDATES[*]}" >&2
+            exit 1
           fi
+          UKI_NAME=$(basename "${UKI_CANDIDATES[0]}")
           ADDON_DIR="/boot/EFI/Linux/${UKI_NAME}.extra.d"
           if [[ -f "${TEMPLATE}" ]] && [[ ! -f "${ADDON_DIR}/kdump.addon.efi" ]]; then
             mkdir -p "${ADDON_DIR}"
@@ -75,6 +82,7 @@ systemd:
         Before=basic.target
         RequiresMountsFor=/boot
         ConditionKernelCommandLine=!crashkernel
+        ConditionPathExistsGlob=/sys/firmware/efi/efivars/StubInfo-*
 
         [Service]
         Type=oneshot
@@ -111,8 +119,12 @@ func kdumpUKITest(c cluster.TestCluster) {
 		c.Fatalf("kdump (kexec-tools) not installed on this image")
 	}
 
-	// UKI test only - fail on GRUB-booted images
-	if _, err := c.SSH(m, "sudo test -d /boot/EFI/Linux"); err != nil {
+	isUki, err := util.IsUKI(m)
+	if err != nil {
+		c.Fatalf("failed to probe boot mode: %v", err)
+	}
+	if !isUki {
+		// UKI test only - fail on GRUB-booted images
 		c.Fatalf("UKI kdump test running on a GRUB-booted image")
 	}
 
