@@ -65,6 +65,11 @@ func verifyAWS(c cluster.TestCluster) {
 
 func verifyAzure(c cluster.TestCluster) {
 	verify(c, "COREOS_AZURE_IPV4_DYNAMIC")
+	m := c.Machines()[0]
+	out := c.MustSSH(m, "sed -n 's/^COREOS_AZURE_IPV4_DYNAMIC=//p' /run/metadata/coreos")
+	if actual := strings.TrimSpace(string(out)); actual != m.PrivateIP() {
+		c.Errorf("COREOS_AZURE_IPV4_DYNAMIC = %q, want Azure NIC private IP %q", actual, m.PrivateIP())
+	}
 	// kola tests do not spawn machines behind a load balancer on Azure
 	// which is required for COREOS_AZURE_IPV4_VIRTUAL to be present
 }
