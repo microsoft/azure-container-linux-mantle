@@ -56,3 +56,4 @@ exceptions|New location for etc lower dir|
 |cl.network.initramfs.second-boot|acl.network.initramfs.second-boot|Forked as ACL-specific test; excludes `azure` from `ExcludePlatforms`|ACL's SELinux toggle enables networkd in initrd on Azure for all boots; test only valid on QEMU|
 |docker.selinux|docker.selinux|Skip legacy version branch on ACL|ACL's on-machine `VERSION=` (`3.0.x`) is `< 3510.4`, causing the wrong AVC regex (`vda` + `svirt_lxc_net_t`)|
 |cl.overlay.cleanup|cl.overlay.cleanup|Modify run method `OverlayCleanup` to use modified filesystem paths for testing |ACL's image does not have the test paths because the AzL RPMs providing them are skipped during build.|
+|cl.metadata.azure|cl.metadata.azure|Also require `COREOS_AZURE_IPV4_DYNAMIC` to equal the VM's private IP|WireServer can report a wrong IPv4 address on Azure Arm64; ACL corrects it at boot|
