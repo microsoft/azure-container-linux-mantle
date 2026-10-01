@@ -54,7 +54,7 @@ func init() {
 		Run:            RecoverBadVerity,
 		ClusterSize:    1,
 		Name:           "cl.update.badverity",
-		Flags:          []register.Flag{register.NoEmergencyShellCheck, register.NoKernelPanicCheck},
+		Flags:          []register.Flag{register.NoEmergencyShellCheck, register.NoKernelPanicCheck, register.NoVerityCorruptionCheck},
 		UserData:       disableUpdateEngine,
 		Distros:        []string{"cl"},
 		ExcludeDistros: []string{"acl"},
