@@ -39,6 +39,7 @@ import (
 	"github.com/flatcar/mantle/harness"
 	"github.com/flatcar/mantle/harness/reporters"
 	"github.com/flatcar/mantle/kola/cluster"
+	"github.com/flatcar/mantle/kola/concurrency"
 	"github.com/flatcar/mantle/kola/register"
 	"github.com/flatcar/mantle/kola/torcx"
 	"github.com/flatcar/mantle/platform"
@@ -565,11 +566,16 @@ func RunTests(patterns []string, channel, offering, pltfrm, outputDir string, ss
 			reporters.NewJSONReporter("report.json", pltfrm, imageSemver.String()),
 		},
 	}
+	limiter := concurrency.New(TestParallelism)
+	if concurrency.WeightForPlatform(2, pltfrm) > 1 {
+		plog.Infof("Using weighted local-QEMU concurrency budget of %d", limiter.Capacity())
+	}
 	var htests harness.Tests
 	for _, test := range tests {
 		test := test // for the closure
+		weight := concurrency.WeightForPlatform(test.EffectiveParallelismWeight(), pltfrm)
 		run := func(h *harness.H) {
-			runTest(h, test, pltfrm, flight, remove)
+			runTest(h, test, pltfrm, flight, remove, limiter, weight)
 		}
 		htests.Add(test.Name, run)
 	}
@@ -668,8 +674,10 @@ func parseCLVersion(input string) (*semver.Version, error) {
 // runTest is a harness for running a single test.
 // outputDir is where various test logs and data will be written for
 // analysis after the test run. It should already exist.
-func runTest(h *harness.H, t *register.Test, pltfrm string, flight platform.Flight, remove bool) {
+func runTest(h *harness.H, t *register.Test, pltfrm string, flight platform.Flight, remove bool, limiter *concurrency.Limiter, weight int) {
 	h.Parallel()
+	reserved := limiter.Acquire(weight)
+	defer limiter.Release(reserved)
 
 	rconf := &platform.RuntimeConfig{
 		OutputDir:          h.OutputDir(),

@@ -198,8 +198,9 @@ func init() {
 				}
 
 				register.Register(&register.Test{
-					Name:    fmt.Sprintf("kubeadm.%s.%s%s.base", version, CNI, cgroupSuffix),
-					Distros: []string{"acl", "cl"},
+					Name:              fmt.Sprintf("kubeadm.%s.%s%s.base", version, CNI, cgroupSuffix),
+					Distros:           []string{"acl", "cl"},
+					ParallelismWeight: 3, // etcd, master, and worker
 					// This should run on all clouds as a good end-to-end test
 					// Network config problems in qemu-unpriv
 					ExcludePlatforms: []string{"qemu-unpriv"},

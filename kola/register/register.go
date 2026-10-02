@@ -61,6 +61,11 @@ type Test struct {
 	Architectures    []string // whitelist of machine architectures supported -- defaults to all
 	Flags            []Flag   // special-case options for this test
 
+	// ParallelismWeight is the maximum number of shared resource units this
+	// test needs while running. A zero value defaults to ClusterSize, or one
+	// when the test creates machines dynamically.
+	ParallelismWeight int
+
 	// FailFast skips any sub-test that occurs after a sub-test has
 	// failed.
 	FailFast bool
@@ -98,8 +103,23 @@ func Register(t *Test) {
 	if (t.EndVersion != semver.Version{}) && !t.MinVersion.LessThan(t.EndVersion) {
 		panic(fmt.Sprintf("test %v has an invalid version range", t.Name))
 	}
+	if t.ParallelismWeight < 0 {
+		panic(fmt.Sprintf("test %v has a negative parallelism weight", t.Name))
+	}
 
 	Tests[t.Name] = t
+}
+
+// EffectiveParallelismWeight returns the declared scheduling weight, falling
+// back to the statically declared cluster size and then to one resource unit.
+func (t *Test) EffectiveParallelismWeight() int {
+	if t.ParallelismWeight > 0 {
+		return t.ParallelismWeight
+	}
+	if t.ClusterSize > 0 {
+		return t.ClusterSize
+	}
+	return 1
 }
 
 func (t *Test) HasFlag(flag Flag) bool {
