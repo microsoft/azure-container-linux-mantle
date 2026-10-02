@@ -81,7 +81,7 @@ func init() {
 	root.PersistentFlags().StringVarP(&kolaChannel, "channel", "", "stable", "Channel: "+strings.Join(kolaChannels, ", "))
 	root.PersistentFlags().StringVarP(&kolaOffering, "offering", "", "basic", "Offering: "+strings.Join(kolaOfferings, ", "))
 	root.PersistentFlags().StringVarP(&kola.Options.Distribution, "distro", "b", "cl", "Distribution: "+strings.Join(kolaDistros, ", "))
-	root.PersistentFlags().IntVarP(&kola.TestParallelism, "parallel", "j", 1, "number of tests to run in parallel")
+	root.PersistentFlags().IntVarP(&kola.TestParallelism, "parallel", "j", 1, "number of tests to run in parallel; local QEMU also uses this as the weighted guest budget")
 	sv(&kolaImageVersion, "image-version", "", "Version of the tested image, build ID (if any) should be separated from version ID with a '+'")
 	bv(&kolaDisableSELinuxAVCChecks, "disable-selinux-avc-checks", false, "Disable checking for AVC messages in test journal outputs")
 	sv(&kola.TAPFile, "tapfile", "", "file to write TAP results to")
