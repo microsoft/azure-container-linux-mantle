@@ -14,6 +14,21 @@ The following tests are currently disabled in ACL:
 |---|---|
 |acl.flannel.udp|Legacy Docker-based wrapper being retired to remove its Quay dependency.|
 |acl.flannel.vxlan|Legacy Docker-based wrapper being retired to remove its Quay dependency.|
+|acl.etcd-member.discovery|Uses the retired Docker-based etcd-member wrapper on ACL.|
+|cl.etcd-member.etcdctlv3|Uses the retired Docker-based etcd-member wrapper on ACL; still runs on Flatcar.|
+|cl.etcd-member.v2-backup-restore|Uses the retired Docker-based etcd-member wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.32.4.calico.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.32.4.cilium.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.32.4.flannel.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.32.4.calico.cgroupv1.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.32.4.cilium.cgroupv1.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.32.4.flannel.cgroupv1.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.33.0.calico.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.33.0.cilium.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.33.0.flannel.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.34.1.calico.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.34.1.cilium.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
+|kubeadm.v1.34.1.flannel.base|Provisions external etcd through the retired wrapper on ACL; still runs on Flatcar.|
 |cl.locksmith.cluster|A/B update not targeted for GA|
 |cl.locksmith.reboot|A/B update not targeted for GA|
 |cl.omaha.ping|A/B update not targeted for GA|
