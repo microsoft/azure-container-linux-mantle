@@ -127,7 +127,7 @@ func checkDisjointPackageManifests(contentsByManifest map[string][]byte) error {
 
 	seenPackagesByName := make(map[string][]manifestPackage)
 	for _, manifestName := range manifestNames {
-		isSysextManifest, _ := path.Match("package-manifest.*.spdx.json", manifestName)
+		isSysextManifest, _ := path.Match("package-manifest.?*.spdx.json", manifestName)
 		if manifestName != imageManifestName && !isSysextManifest {
 			errs = append(errs, fmt.Errorf("unexpected SPDX manifest %s", manifestName))
 			// Still validate contents so an unexpected filename cannot hide

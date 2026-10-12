@@ -213,6 +213,32 @@ func TestCheckDisjointPackageManifests(test *testing.T) {
 			wantError: "unexpected SPDX manifest other.spdx.json",
 		},
 		{
+			name: "empty sysext name",
+			manifests: map[string]string{
+				imageManifestName:             `{"packages":[` + bashPackage + `]}`,
+				"package-manifest..spdx.json": `{"packages":[` + gdbPackage + `]}`,
+			},
+			wantError: "unexpected SPDX manifest package-manifest..spdx.json",
+		},
+		{
+			name: "empty sysext name still checked for overlaps",
+			manifests: map[string]string{
+				imageManifestName:             `{"packages":[` + bashPackage + `]}`,
+				"package-manifest..spdx.json": `{"packages":[` + newBashPackage + `]}`,
+			},
+			wantError: strings.Join([]string{
+				"unexpected SPDX manifest package-manifest..spdx.json",
+				`package sets are not disjoint: package "bash" appears in both package-manifest..spdx.json (bash-0:5.3-1.azl3.x86_64) and package-manifest.spdx.json (bash-0:5.2-1.azl3.x86_64)`,
+			}, "\n"),
+		},
+		{
+			name: "single character sysext name",
+			manifests: map[string]string{
+				imageManifestName:              `{"packages":[` + bashPackage + `]}`,
+				"package-manifest.a.spdx.json": `{"packages":[` + gdbPackage + `]}`,
+			},
+		},
+		{
 			name: "unexpected manifest still checked for overlaps",
 			manifests: map[string]string{
 				imageManifestName:                 `{"packages":[` + bashPackage + `]}`,
