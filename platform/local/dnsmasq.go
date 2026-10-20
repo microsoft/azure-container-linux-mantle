@@ -22,6 +22,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/coreos/go-iptables/iptables"
@@ -64,6 +65,7 @@ type Segment struct {
 }
 
 type Dnsmasq struct {
+	mu       sync.Mutex
 	Segments []*Segment
 	dnsmasq  *exec.ExecCmd
 }
@@ -487,6 +489,9 @@ func NewDnsmasq() (*Dnsmasq, error) {
 }
 
 func (dm *Dnsmasq) GetInterface(bridge string) (in *Interface) {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
 	for _, seg := range dm.Segments {
 		if bridge == seg.BridgeName {
 			if seg.nextIf >= len(seg.Interfaces) {

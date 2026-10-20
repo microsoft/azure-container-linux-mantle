@@ -18,11 +18,48 @@ package local
 
 import (
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetInterfaceConcurrent(t *testing.T) {
+	const count = 256
+	segment := &Segment{
+		BridgeName: "br0",
+		Interfaces: make([]*Interface, count),
+	}
+	for i := range segment.Interfaces {
+		segment.Interfaces[i] = &Interface{}
+	}
+	dm := &Dnsmasq{Segments: []*Segment{segment}}
+	start := make(chan struct{})
+	results := make(chan *Interface, count)
+	var workers sync.WaitGroup
+	for i := 0; i < count; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			results <- dm.GetInterface("br0")
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+
+	seen := make(map[*Interface]bool, count)
+	for in := range results {
+		require.NotNil(t, in)
+		require.False(t, seen[in], "interface was allocated to multiple machines")
+		seen[in] = true
+	}
+	for _, in := range segment.Interfaces {
+		require.True(t, seen[in], "interface was not allocated")
+	}
+}
 
 func TestGenerateVethPair(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
