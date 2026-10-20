@@ -362,19 +362,22 @@ func CheckMachine(ctx context.Context, m Machine) error {
 			return err
 		}
 		out, stderr, err := m.SSH("systemctl is-system-running")
-		if !bytes.Contains([]byte("initializing starting running stopping"), out) {
-			return nil // stop retrying if the system went haywire, e.g., "degraded"
+		state := strings.TrimSpace(string(out))
+		switch state {
+		case "running":
+			if err == nil {
+				return nil
+			}
+		case "degraded", "maintenance":
+			// Let the subsequent distro and failed-unit checks report the failure.
+			return nil
 		}
 		jobs := ""
-		if bytes.Contains([]byte("starting"), out) {
+		if state == "starting" {
 			startingOut, startingStderr, startingErr := m.SSH("systemctl list-jobs")
 			jobs = fmt.Sprintf(", systemctl list-jobs returned stdout: %q, stderr: %q, err: %v", startingOut, startingStderr, startingErr)
 		}
-		// For "running" the exit code is 0 thus err is nil but not for, e.g., "starting" where the exit code is 1
-		if err != nil {
-			return fmt.Errorf("failure checking if machine is running: systemctl is-system-running returned stdout: %q, stderr: %q, err: %v%s", out, stderr, err, jobs)
-		}
-		return nil
+		return fmt.Errorf("failure checking if machine is running: systemctl is-system-running returned stdout: %q, stderr: %q, err: %v%s", out, stderr, err, jobs)
 	}
 
 	rc := m.RuntimeConf()

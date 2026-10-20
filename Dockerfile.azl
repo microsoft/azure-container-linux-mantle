@@ -13,7 +13,7 @@ COPY . /usr/src/mantle
 # Build amd64 binaries (with CGO), then arm64 binaries (CGO_ENABLED=0)
 RUN cd /usr/src/mantle \
     && go test -mod=vendor -race -count=20 ./platform/local \
-    && go test -mod=vendor ./kola/tests/docker \
+    && go test -mod=vendor ./platform ./kola/tests/docker \
     && ./build \
     && mv bin bin-amd64 \
     && CGO_ENABLED=0 GOARCH=arm64 ./build \
