@@ -15,7 +15,6 @@
 package docker
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -822,11 +821,14 @@ docker run -v "/etc/misc:/opt" --rm ghcr.io/flatcar/busybox true`
 		c.Fatalf("failed to parse os-release version: %v", err)
 	}
 
-	out, err = c.SSH(m, `journalctl | grep -ie 'avc:[[:space:]]*denied'`)
+	out, err = c.SSH(m, `journalctl -o json --grep='avc:[[:space:]]*denied' --case-sensitive=no`)
 	if err != nil {
 		c.Fatalf("failed to get AVC messages from journal: %v", err)
 	}
-	s := bufio.NewScanner(bytes.NewReader(out))
+	messages, err := selinuxAVCMessages(out)
+	if err != nil {
+		c.Fatalf("failed to parse AVC messages from journal: %v", err)
+	}
 
 	// LTS-2023 uses different device for /etc (part of the root
 	// partition) and different SELinux context. On newer Flatcar
@@ -850,8 +852,8 @@ docker run -v "/etc/misc:/opt" --rm ghcr.io/flatcar/busybox true`
 	if kola.Options.Distribution != "acl" && sv.LessThan(semver.Version{Major: kola.AVCChecksMajorVersion}) {
 		// old Flatcar, lenient checks
 		found := false
-		for s.Scan() {
-			if r.MatchString(s.Text()) {
+		for _, message := range messages {
+			if r.MatchString(message) {
 				found = true
 				break
 			}
@@ -862,13 +864,13 @@ docker run -v "/etc/misc:/opt" --rm ghcr.io/flatcar/busybox true`
 	} else {
 		// new Flatcar, strict checks
 		found := false
-		for s.Scan() {
+		for _, message := range messages {
 			if found {
 				c.Fatalf("too many AVCs, expected only one")
 			}
 			found = true
-			if !r.MatchString(s.Text()) {
-				c.Fatalf("unexpected AVC: %s", s.Text())
+			if !r.MatchString(message) {
+				c.Fatalf("unexpected AVC: %s", message)
 			}
 		}
 		if !found {
