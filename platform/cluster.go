@@ -301,8 +301,8 @@ WantedBy=multi-user.target
 		conf.AddFile("/etc/pivot/image-pullspec", "root", bc.bf.baseopts.OSContainer, 0644)
 	}
 
-	// Test images carry this extension on OEM, outside sysext's search paths.
-	// Activate test tooling independently of the per-test NeedsDocker flag.
+	// Test images store kola-testing on OEM, outside sysext's search paths.
+	// Activate it even when IncludeDocker is false.
 	if bc.Distribution() == "acl" {
 		conf.AddSystemdUnit("sysext-kola-testing-link.service", `[Unit]
 Description=Create symlink for Kola testing sysext
