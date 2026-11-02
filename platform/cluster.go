@@ -325,6 +325,16 @@ WantedBy=sysinit.target
 Wants=sysext-kola-testing-link.service
 After=sysext-kola-testing-link.service
 `)
+		// Script userdata cannot install units or drop-ins, and sysext may
+		// already have merged before the script runs.
+		conf.AppendScriptCommands(`
+# Activate kola testing sysext
+if [ -e /oem/sysext/kola-testing.raw ]; then
+	mkdir -p /etc/extensions
+	ln -sf /oem/sysext/kola-testing.raw /etc/extensions/kola-testing.raw
+	systemd-sysext refresh
+fi
+`)
 	}
 
 	if bc.Distribution() == "acl" && bc.rconf.IncludeDocker {
