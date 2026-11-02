@@ -57,6 +57,10 @@ func TestConfAddSystemdUnitDropin(t *testing.T) {
 				t.Fatalf("expected two units, got %s", c.String())
 			}
 			for i, name := range []string{"10-existing.conf", "20-new.conf"} {
+				service := []string{"example.service", "other.service"}[i]
+				if config.Systemd.Units[i].Name != service {
+					t.Errorf("expected unit %s, got %s", service, config.Systemd.Units[i].Name)
+				}
 				dropins := config.Systemd.Units[i].Dropins
 				if len(dropins) != 1 || dropins[0].Name != name || dropins[0].Contents != contents {
 					t.Errorf("unexpected dropins for %s: %+v", config.Systemd.Units[i].Name, dropins)
