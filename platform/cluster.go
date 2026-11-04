@@ -193,9 +193,8 @@ func (bc *BaseCluster) RenderUserData(userdata *conf.UserData, ignitionVars map[
 	// Fixes: cl.ignition.*, bpf.local-gadget, acl.flannel.*, cl.cloudinit.script, etc.
 	//
 	// Mechanisms by config type:
-	//   1. AddSystemdUnit  — ignition (v2/v3): oneshot writes sudoers + usermod.
-	//   2. AddFile          — script/multipart-mime: sudoers drop-in
-	//      (silently dropped on ign-v2, but (1) covers that).
+	//   1. AddSystemdUnit  — ignition: oneshot writes sudoers + usermod.
+	//   2. AddFile          — non-ignition configs: sudoers drop-in.
 	//   3. AppendScriptCommands — script only: inline usermod before sshd.
 	//      Fixes cl.cloudinit.script.
 	//
@@ -219,9 +218,12 @@ RemainAfterExit=true
 [Install]
 WantedBy=multi-user.target`, true)
 
-		// (2) Sudoers file for script/multipart-mime (silently dropped on ign-v2):
-		conf.AddFile("/etc/sudoers.d/kola-core-nopasswd", "root",
-			"core ALL=(ALL) NOPASSWD: ALL\n", 0440)
+		// Ignition v1 file writes bypass /etc's overlay and can leave stale entries.
+		// For Ignition, let the unit above create sudoers through the overlay.
+		if !conf.IsIgnition() {
+			conf.AddFile("/etc/sudoers.d/kola-core-nopasswd", "root",
+				"core ALL=(ALL) NOPASSWD: ALL\n", 0440)
+		}
 
 		// (3) Inline commands for script configs (no-op on other types):
 		conf.AppendScriptCommands("\n# Create core user for kola tests\n" +

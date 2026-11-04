@@ -16,6 +16,7 @@ package ignition
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/coreos/go-semver/semver"
@@ -29,7 +30,7 @@ const (
 	targetUUID   = "9aa5237a-ab6b-458b-a7e8-f25e2baef1a3"
 	targetVfatID = "1A37-8FA3"
 	swapFileName = "/var/vm/swapfile1"
-	swapSize     = "1024M"
+	swapSize     = 1024 * 1024 * 1024
 )
 
 func init() {
@@ -308,7 +309,7 @@ systemd:
         [Service]
         Type=oneshot
         ExecStart=/usr/bin/mkdir -p /var/vm
-        ExecStart=/usr/bin/fallocate -l %[2]s %[1]s
+        ExecStart=/usr/bin/fallocate -l %[2]d %[1]s
         ExecStart=/usr/bin/chmod 600 %[1]s
         ExecStart=/usr/sbin/mkswap %[1]s
         RemainAfterExit=true`, swapFileName, swapSize))
@@ -426,16 +427,17 @@ func ext4CheckExisting(c cluster.TestCluster) {
 func testSwapActivation(c cluster.TestCluster) {
 	m := c.Machines()[0]
 
-	out := c.MustSSH(m, "swapon --show=NAME,SIZE --noheadings")
+	// Compare bytes so display rounding cannot hide the swap header's size.
+	out := c.MustSSH(m, "swapon --bytes --show=NAME,SIZE --noheadings")
 	swap := string(out)
 
 	if swap == "" {
 		c.Fatalf("swap is not enabled while it should be")
 	}
 
-	columns := strings.Split(swap, " ")
-	if len(columns) < 2 {
-		c.Fatalf("swap output should be at least: name size")
+	columns := strings.Fields(swap)
+	if len(columns) != 2 {
+		c.Fatalf("expected one swap entry with name and size, got %q", swap)
 	}
 
 	name := columns[0]
@@ -445,8 +447,17 @@ func testSwapActivation(c cluster.TestCluster) {
 		c.Fatalf("swap's name should be: %s, got %s", swapFileName, swap)
 	}
 
-	if size != swapSize {
-		c.Fatalf("swap's size should be: %s, got %s", swapSize, size)
+	// ARM64 HWE uses 64 KiB pages for NVIDIA GB200/GB300 support, rather than 4 KiB.
+	// mkswap reserves one page for its header, so usable swap size depends on
+	// the guest's page size.
+	pageSizeOutput := strings.TrimSpace(string(c.MustSSH(m, "getconf PAGESIZE")))
+	pageSize, err := strconv.Atoi(pageSizeOutput)
+	if err != nil || pageSize <= 0 || pageSize >= swapSize {
+		c.Fatalf("invalid guest page size %q: expected a positive byte count below %d", pageSizeOutput, swapSize)
+	}
+	expectedSize := strconv.Itoa(swapSize - pageSize)
+	if size != expectedSize {
+		c.Fatalf("swap's size should be: %s bytes, got %s", expectedSize, size)
 	}
 }
 
