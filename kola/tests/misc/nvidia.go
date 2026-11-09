@@ -395,7 +395,8 @@ func verifyAclGpuSysextInstallation(c cluster.TestCluster) {
 	// Install ORAS CLI
 	_ = c.MustSSH(m, fmt.Sprintf(`
 		sudo mkdir -p /opt/oras-install/ && \
-		sudo curl -fsSL -o /opt/oras-install/oras_%s_linux_amd64.tar.gz \
+		sudo curl -fsSL --retry 3 --retry-all-errors --retry-max-time 120 \
+			--connect-timeout 10 --max-time 60 -o /opt/oras-install/oras_%s_linux_amd64.tar.gz \
 			"https://github.com/oras-project/oras/releases/download/v%s/oras_%s_linux_amd64.tar.gz" && \
 		sudo tar -zxf /opt/oras-install/oras_%s_linux_amd64.tar.gz -C /opt/oras-install/ && \
 		sudo rm -f /opt/oras-install/oras_%s_linux_amd64.tar.gz
