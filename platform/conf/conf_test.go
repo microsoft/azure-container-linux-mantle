@@ -15,6 +15,7 @@
 package conf
 
 import (
+	"encoding/json"
 	"errors"
 	"net"
 	"strings"
@@ -22,6 +23,52 @@ import (
 
 	"github.com/flatcar/mantle/network"
 )
+
+func TestConfAddSystemdUnitDropin(t *testing.T) {
+	for _, version := range []string{"1", "2.0.0", "2.1.0", "2.2.0", "2.3.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0"} {
+		t.Run(version, func(t *testing.T) {
+			data := `{"ignition":{"version":"` + version + `"}}`
+			if version == "1" {
+				data = `{"ignitionVersion":1}`
+			}
+			c, err := Ignition(data).Render("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			const contents = "[Service]\nEnvironment=KOLA_TEST=1\n"
+			c.AddSystemdUnit("example.service", "[Service]\nExecStart=/bin/true\n", true)
+			c.AddSystemdUnitDropin("example.service", "10-existing.conf", contents)
+			c.AddSystemdUnitDropin("other.service", "20-new.conf", contents)
+			var config struct {
+				Systemd struct {
+					Units []struct {
+						Name    string
+						Dropins []struct {
+							Name     string
+							Contents string
+						}
+					}
+				}
+			}
+			if err := json.Unmarshal(c.Bytes(), &config); err != nil {
+				t.Fatal(err)
+			}
+			if len(config.Systemd.Units) != 2 {
+				t.Fatalf("expected two units, got %s", c.String())
+			}
+			for i, name := range []string{"10-existing.conf", "20-new.conf"} {
+				service := []string{"example.service", "other.service"}[i]
+				if config.Systemd.Units[i].Name != service {
+					t.Errorf("expected unit %s, got %s", service, config.Systemd.Units[i].Name)
+				}
+				dropins := config.Systemd.Units[i].Dropins
+				if len(dropins) != 1 || dropins[0].Name != name || dropins[0].Contents != contents {
+					t.Errorf("unexpected dropins for %s: %+v", config.Systemd.Units[i].Name, dropins)
+				}
+			}
+		})
+	}
+}
 
 func TestConfCopyKey(t *testing.T) {
 	agent, err := network.NewSSHAgent(&net.Dialer{})

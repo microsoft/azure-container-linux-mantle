@@ -301,6 +301,42 @@ WantedBy=multi-user.target
 		conf.AddFile("/etc/pivot/image-pullspec", "root", bc.bf.baseopts.OSContainer, 0644)
 	}
 
+	// Test images store kola-testing on OEM, outside sysext's search paths.
+	// Activate it even when IncludeDocker is false.
+	if bc.Distribution() == "acl" {
+		conf.AddSystemdUnit("sysext-kola-testing-link.service", `[Unit]
+Description=Create symlink for Kola testing sysext
+DefaultDependencies=no
+Before=systemd-sysext.service
+After=local-fs.target
+ConditionPathExists=/oem/sysext/kola-testing.raw
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/bin/mkdir -p /etc/extensions
+ExecStart=/usr/bin/ln -sf /oem/sysext/kola-testing.raw /etc/extensions/kola-testing.raw
+
+[Install]
+WantedBy=sysinit.target
+`, true)
+		conf.AddSystemdUnitDropin("systemd-sysext.service", "10-wait-for-kola-testing-link.conf",
+			`[Unit]
+Wants=sysext-kola-testing-link.service
+After=sysext-kola-testing-link.service
+`)
+		// Script userdata cannot install units or drop-ins, and sysext may
+		// already have merged before the script runs.
+		conf.AppendScriptCommands(`
+# Activate kola testing sysext
+if [ -e /oem/sysext/kola-testing.raw ]; then
+	mkdir -p /etc/extensions
+	ln -sf /oem/sysext/kola-testing.raw /etc/extensions/kola-testing.raw
+	systemd-sysext refresh
+fi
+`)
+	}
+
 	if bc.Distribution() == "acl" && bc.rconf.IncludeDocker {
 		conf.AddSystemdUnit("sysext-docker-link.service", `[Unit]
 Description=Create symlink for docker sysext
